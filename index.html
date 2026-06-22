@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flowmap — diagrams for dev work</title>
+<link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+<header>
+  <div class="brand">flow<span>map</span></div>
+
+  <div class="bar-group" id="shapeTools">
+    <button class="tool" data-shape="rect" title="Box (process / module)"><span class="ic">▭</span><span class="hide-sm">Box</span></button>
+    <button class="tool" data-shape="round" title="Rounded"><span class="ic">▢</span></button>
+    <button class="tool" data-shape="stadium" title="Stadium (start/end)"><span class="ic">⬭</span></button>
+    <button class="tool" data-shape="cylinder" title="Store / database"><span class="ic">⛁</span></button>
+    <button class="tool" data-shape="diamond" title="Decision"><span class="ic">◇</span></button>
+    <button class="tool" data-shape="circle" title="State / event"><span class="ic">◯</span></button>
+    <button class="tool" data-shape="hex" title="Prepare / service"><span class="ic">⬡</span></button>
+    <button class="tool" data-shape="note" title="Sticky note"><span class="ic">🗒</span></button>
+    <button class="tool" data-shape="group" title="Group container"><span class="ic">⬚</span></button>
+  </div>
+
+  <div class="bar-sep"></div>
+  <button class="tool" id="linkBtn" title="Link mode (L)"><span class="ic">↳</span><span class="hide-sm">Link</span></button>
+
+  <div class="bar-sep"></div>
+  <div class="bar-group">
+    <button class="tool" id="undoBtn" title="Undo (Ctrl/⌘+Z)" disabled><span class="ic">↶</span></button>
+    <button class="tool" id="redoBtn" title="Redo (Ctrl/⌘+Shift+Z)" disabled><span class="ic">↷</span></button>
+  </div>
+
+  <div class="bar-sep hide-sm"></div>
+  <button class="tool hide-sm" id="layoutBtn" title="Auto-layout (tidy tree)"><span class="ic">⊹</span><span>Tidy</span></button>
+  <button class="tool hide-sm" id="snapBtn" title="Toggle snap-to-grid"><span class="ic">⊞</span><span>Snap</span></button>
+
+  <div class="right">
+    <button class="tool" id="exportPngBtn" title="Export PNG"><span class="ic">⬇</span><span class="hide-sm">PNG</span></button>
+    <button class="tool" id="exportSvgBtn" title="Export SVG"><span class="ic">⬇</span><span class="hide-sm">SVG</span></button>
+    <div class="bar-sep"></div>
+    <button class="filebtn" id="saveBtn" title="Save .mmd">Save</button>
+    <label class="filebtn" for="loadInput" title="Load .mmd">Load</label>
+    <input id="loadInput" type="file" accept=".mmd,.txt" hidden>
+    <div class="bar-sep"></div>
+    <button class="tool" id="panelBtn" title="Toggle side panel (Tab)"><span class="ic">◧</span></button>
+    <button class="tool" id="helpBtn" title="Shortcuts (?)"><span class="ic">?</span></button>
+  </div>
+</header>
+
+<main id="main">
+  <div class="stage" id="stage">
+    <div class="world" id="world">
+      <svg class="wires" id="wires"></svg>
+      <!-- nodes injected here, after svg so they sit above wires -->
+    </div>
+    <div class="zoombar">
+      <button id="zOut" title="Zoom out">−</button>
+      <div class="zlevel" id="zLevel" title="Reset to 100%">100%</div>
+      <button id="zIn" title="Zoom in">+</button>
+      <button id="zFit" title="Zoom to fit (F)" style="font-size:13px">⤢</button>
+    </div>
+    <div class="statusbar" id="status">0 nodes · 0 edges</div>
+    <div class="minimap" id="minimap" title="Click or drag to move the view">
+      <canvas id="mmCanvas" width="376" height="248"></canvas>
+      <span class="mm-label">map</span>
+    </div>
+  </div>
+
+  <aside>
+    <div class="ptab">
+      <button id="tabInsp" class="active">inspector</button>
+      <button id="tabStyle">style</button>
+      <button id="tabMmd">mermaid</button>
+    </div>
+
+    <div class="ppane insp" id="paneInsp">
+      <div class="empty" id="inspEmpty">
+        Nothing selected.<br><br>
+        Click a shape in the toolbar to drop it.<br>
+        Drag from a node's <b style="color:var(--accent-2)">amber port</b> to wire it up.<br>
+        Double-click a node to rename inline.<br><br>
+        Drag empty canvas to marquee-select.<br>
+        Scroll to pan · pinch or <kbd>⌘</kbd>-scroll to zoom.<br><br>
+        Open the <b style="color:var(--accent)">Style</b> tab to change theme &amp; font.<br>
+        Press <kbd>?</kbd> for all shortcuts.
+      </div>
+      <div id="inspBody" style="display:none; flex-direction:column; gap:13px;"></div>
+    </div>
+
+    <div class="ppane" id="paneMmd" style="display:none">
+      <textarea id="mmd" spellcheck="false"></textarea>
+    </div>
+
+    <div class="ppane stylepane" id="paneStyle" style="display:none">
+      <div class="sgroup">
+        <div class="slabel">Theme</div>
+        <div class="theme-grid" id="themeGrid"></div>
+      </div>
+      <div class="sgroup">
+        <div class="slabel">Label font</div>
+        <select id="fontSel" class="ssel"></select>
+        <div class="fontpreview" id="fontPreview">DragManager → store</div>
+      </div>
+      <div class="sgroup">
+        <div class="slabel">Canvas</div>
+        <label class="srow"><span>Dot grid</span><input type="checkbox" id="optGrid" checked></label>
+        <label class="srow"><span>Snap to grid</span><input type="checkbox" id="optSnap" checked></label>
+        <label class="srow"><span>Minimap</span><input type="checkbox" id="optMap" checked></label>
+        <label class="srow"><span>Frontmatter cards</span><input type="checkbox" id="optFm"></label>
+        <label class="srow"><span>Card width</span><input type="range" id="optFmWidth" min="160" max="560" step="10"><span id="fmWidthVal" class="srow-val">260</span></label>
+      </div>
+      <div class="sgroup">
+        <div class="slabel">New connections</div>
+        <select id="routeSel" class="ssel">
+          <option value="straight">Straight lines</option>
+          <option value="ortho">Right-angle (elbow)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="panel-foot" id="footMmd" style="display:none">
+      <button class="filebtn" id="applyMmd">Apply text → canvas</button>
+      <button class="filebtn" id="copyMmd">Copy</button>
+    </div>
+    <div class="panel-foot" id="footInsp">
+      <button class="filebtn" id="addQuick" style="flex:2; justify-content:center">+ Add box</button>
+      <button class="filebtn danger" id="clearAll" style="flex:1; justify-content:center">Clear</button>
+    </div>
+  </aside>
+</main>
+
+<!-- context menu -->
+<div class="ctx" id="ctx"></div>
+
+<!-- help -->
+<div class="help-overlay" id="helpOverlay">
+  <div class="help-card">
+    <h2>flow<span>map</span> — shortcuts</h2>
+    <div class="sub">A diagram tool for dev work. Spatial layout, two-way Mermaid, exports.</div>
+    <div class="help-grid" id="helpGrid"></div>
+    <button class="filebtn help-close" id="helpClose">Close</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>

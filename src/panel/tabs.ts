@@ -1,0 +1,56 @@
+/* =====================================================================
+   tabs.ts — panel tabs, collapse toggle, and toast
+   ---------------------------------------------------------------------
+   Responsibility: switch the right panel between inspector/style/mermaid
+   panes, collapse/expand the panel, and show transient toast messages.
+   Small UI plumbing with no model knowledge.
+   ===================================================================== */
+
+import type { AppContext } from '../core/context';
+
+export interface TabsApi {
+  showTab: (which: 'insp' | 'style' | 'mmd') => void;
+  togglePanel: () => void;
+  toast: (msg: string) => void;
+}
+
+export function initTabs(ctx: AppContext): TabsApi {
+  const { main } = ctx.dom;
+  const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
+
+  function showTab(which: 'insp' | 'style' | 'mmd'): void {
+    const m = which === 'mmd', s = which === 'style', i = which === 'insp';
+    $('tabMmd').classList.toggle('active', m);
+    $('tabStyle').classList.toggle('active', s);
+    $('tabInsp').classList.toggle('active', i);
+    $('paneMmd').style.display = m ? 'block' : 'none';
+    $('paneStyle').style.display = s ? 'flex' : 'none';
+    $('paneInsp').style.display = i ? 'flex' : 'none';
+    $('footMmd').style.display = m ? 'flex' : 'none';
+    $('footInsp').style.display = i ? 'flex' : 'none';
+    if (m) ctx.hooks.sync();
+  }
+
+  let panelOpen = true;
+  function togglePanel(): void {
+    panelOpen = !panelOpen;
+    main.classList.toggle('collapsed', !panelOpen);
+    $('panelBtn').classList.toggle('active', !panelOpen);
+  }
+
+  let toastTimer: number | null = null;
+  function toast(msg: string): void {
+    const t = $('toast');
+    t.textContent = msg; t.classList.add('show');
+    if (toastTimer !== null) clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => t.classList.remove('show'), 1400);
+  }
+
+  // tab buttons
+  $('tabMmd').onclick = () => showTab('mmd');
+  $('tabStyle').onclick = () => showTab('style');
+  $('tabInsp').onclick = () => showTab('insp');
+  $('panelBtn').onclick = togglePanel;
+
+  return { showTab, togglePanel, toast };
+}
