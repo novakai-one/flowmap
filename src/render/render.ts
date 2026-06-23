@@ -12,7 +12,7 @@
 
 import type { AppContext } from '../core/context';
 import type { DiagramNode, Frontmatter } from '../core/types';
-import { esc, KIND_BADGE } from '../core/config';
+import { esc, KIND_BADGE, nodeFill } from '../core/config';
 import { childIdsOf } from '../core/state';
 import { isFrontmatterEmpty, parseTypeRef, nodeUsesType } from '../core/frontmatter';
 
@@ -24,7 +24,8 @@ export interface RenderApi {
 /** Crisp SVG geometry for diamond / hex / cylinder shapes. */
 export function shapeMarkup(n: DiagramNode): string {
   const w = n.w, h = n.h;
-  const fill = n.color ? ` style="fill:${n.color}"` : '';
+  const color = nodeFill(n);
+  const fill = color ? ` style="fill:${color}"` : '';
   const svg = (inner: string): string =>
     `<svg class="shape-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${inner}</svg>`;
   if (n.shape === 'diamond') {
@@ -153,8 +154,10 @@ export function initRender(ctx: AppContext, drawWires: () => void): RenderApi {
       el.style.top = n.y + 'px';
       el.style.width = n.w + 'px';
       el.style.height = n.h + 'px';
-      // custom fill: simple shapes paint the div, svg shapes paint the path
-      if (n.color && !svgShape && n.shape !== 'group' && n.shape !== 'note') el.style.background = n.color;
+      // fill (custom colour, else kind tint): simple shapes paint the div,
+      // svg shapes paint the path via shapeMarkup
+      const fill = nodeFill(n);
+      if (fill && !svgShape && n.shape !== 'group' && n.shape !== 'note') el.style.background = fill;
 
       if (svgShape) el.insertAdjacentHTML('beforeend', shapeMarkup(n));
 

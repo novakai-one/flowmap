@@ -44,7 +44,7 @@ flowchart TD
 ```
 flowchart <dir>                       dir ∈ TD | BT | LR | RL   (TB = alias for TD)
 %% root <id>
-%% kind <id> <kind>                   kind ∈ component|hook|class|store|module|function|type|service|event
+%% kind <id> <kind>                   REQUIRED, one per node. kind ∈ component|hook|class|store|module|function|type|service|event
 %% parent <child> <parent>
 %% fm:meta <id> name=<value>          ≤1 per node
 %% fm:meta <id> desc=<value>          ≤1 per node
@@ -97,9 +97,35 @@ Output order: header, `%% root`, `%% fm:meta`, `%% kind`/`%% parent`, node +
 | circle | state / event | `id(("L"))` | satellite |
 | note | annotation / type | `id>"L"]` | satellite |
 
-`%% kind <id> <kind>` tags the construct independently of shape (badge only,
-never affects layout, optional): `component`, `hook`, `class`, `store`,
-`module`, `function`, `type`, `service`, `event`.
+### Kind — REQUIRED on every node
+
+`%% kind <id> <kind>` tags the **language construct**, which the shape alone
+cannot: `component`, `hook`, `class`, and `module` all collapse to `rect`;
+`hook` and `function` both look like `round`. The shape says *what role it plays
+in the flow*; the kind says *what it actually is in the code*. Emit one for
+every node — a file without kinds reads as anonymous boxes.
+
+Flowmap renders the kind two ways: a corner **badge**, and a subtle **fill tint**
+so every node of the same kind reads as one visual family across the canvas
+(stores share a hue, components another, hooks another). Tint is automatic — do
+not hand-set colours. Kind never affects layout.
+
+Pick the closest construct:
+
+| kind | use for | default shape |
+|---|---|---|
+| component | UI component (React/Vue/etc.), view | rect |
+| hook | hook / composable / reactive accessor | round |
+| class | class, manager, stateful object instance | rect |
+| store | store / slice / global reactive state | cylinder |
+| module | file, namespace, util module, data table | rect |
+| function | pure function, helper, factory | round |
+| type | type, interface, DTO, schema | note |
+| service | external system, API, backend, client | hex |
+| event | event, message, signal, command | circle |
+
+Shape and kind are chosen independently; the table's last column is only the
+default when you *create* a node by kind in the app, not a constraint.
 
 ## 4. Edges
 
@@ -193,17 +219,47 @@ naming the off-level endpoint, instead of a wire into hidden nodes.
 a dashed box. Membership = the definitions between `subgraph` and `end`
 (structural, not position). Declare edges in the body, never inside the
 subgraph. Use for a shared owner / layer / bounded context; skip plain
-sequential flow; avoid one-member groups.
+sequential flow; avoid one-member groups. Tidy now packs a group's members into
+one compact zone, so a group reads as a labelled region, not a smear.
 
 Group vs parent: a group is visible together on one level; a parent is hidden,
 one level down. Group membership is transparent to levels — a grouped node still
 belongs to its drill-in level.
 
+**Sections — the highest-value use of groups.** The group *label* is the section
+caption: it names *what a cluster of nodes is for*, turning a wall of boxes into
+a few readable zones. When you decompose a unit (drill-in, §7 step 8), don't
+leave its inner functions as one flat layer — box them into **purpose sections**
+by the phase of the flow they belong to. A router/conduit splits cleanly into
+sections like **Event routing**, **Rendering**, **Persistence**, **Validation**.
+
+A section is a `subgraph` parented into the unit so it lives on the unit's
+drill-in level:
+
+```
+%% parent routing   WorkspaceArea
+%% parent rendering WorkspaceArea
+  subgraph routing ["Event routing"]
+    blockManager("BlockManager") selectionManager("SelectionManager")
+    dragManager("DragManager") layoutManager("LayoutManager")
+  end
+  subgraph rendering ["Rendering"]
+    DragContainer["DragContainer"] ContentArea["ContentArea"]
+    DatabaseArea["DatabaseArea"] CanvasArea("CanvasArea")
+  end
+```
+
+Drill into WorkspaceArea and the screen reads as two captioned zones — routing
+vs rendering — instead of eight loose nodes. For a one-line caption that is not a
+container (a heading or aside, not a box around members), use a `note` node
+(`id>"Event routing"]`) placed beside the cluster; prefer a `subgraph` whenever
+the caption names a set of nodes that belong together.
+
 ## 7. Conversion procedure (LLM reading a codebase)
 
 1. **Units.** One node per meaningful unit (module, class, service, store, major
    function). ~5–40 at the top level, not one per line. Flag the units you will
-   review/redesign — those get decomposed (step 8); their inner nodes are off
+   review/redesign — those get decomposed (step 9); their inner nodes are off
    this budget.
 2. **IDs.** Short, unique, prefer the symbol name.
 3. **Shapes** (§3) from what each unit is.
@@ -213,17 +269,22 @@ belongs to its drill-in level.
 6. **Everything else dotted**, labelled with the relation verb.
 7. **Frontmatter** per node (§5): name, desc, state, one interface per entry
    point with accepts/returns.
-8. **Decompose flagged units** to function altitude (required for review):
+8. **Kind** every node — `%% kind <id> <kind>` is required, one per node (§3).
+9. **Decompose flagged units** to function altitude (required for review):
    a. one child node per internal function / private step — not just external
       modules it calls;
    b. `%% parent <child> <unit>` each one (hidden at top, shown on drill-in);
    c. wire the private call order with solid edges (§4 rules);
-   d. give each child its own frontmatter (§5);
-   e. if the unit owns a state machine, add a node per state + transition edges.
-9. **Groups** (optional) when nodes share an owner.
-10. **Do not emit** `%% fm` or `%% edge` lines. Emit `%% kind` only if badges are
-    wanted.
-11. **Output** in the §2 order; emit only the `.mmd` text.
+   d. give each child its own frontmatter (§5) and kind;
+   e. **section the children**: box them into purpose `subgraph`s by flow phase
+      (routing / rendering / persistence / …), parented into the unit (§6). Two
+      named zones beat eight loose nodes.
+   f. if the unit owns a state machine, add a node per state + transition edges.
+10. **Groups / sections** — at the top level, group units that share an owner or
+    bounded context; inside a decomposed unit, always section (step 9e).
+11. **Do not emit** `%% fm` or `%% edge` lines (Tidy positions; those are manual
+    polish). Do not hand-set colours — kind drives the tint.
+12. **Output** in the §2 order; emit only the `.mmd` text.
 
 ## 8. Worked example
 
@@ -255,6 +316,11 @@ flowchart TD
 %% fm:meta store i0.returns=void
 %% fm:meta store i1.name=snapshot
 %% fm:meta store i1.returns=State
+%% kind workspace component
+%% kind drag class
+%% kind isDragging function
+%% kind store store
+%% kind tiles component
   workspace["WorkspaceArea"]
   drag("DragManager")
   isDragging{"Dragging?"}
@@ -267,4 +333,5 @@ flowchart TD
 ```
 
 Spine `workspace → drag → store` stacks from the root; `isDragging` parks by
-`drag`, `tiles` by `store`, each dotted link routed around the boxes.
+`drag`, `tiles` by `store`, each dotted link routed around the boxes. Every node
+carries a `%% kind`, so each renders with its construct badge and tint.

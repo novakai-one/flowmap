@@ -12,7 +12,7 @@
 import type { AppContext } from '../core/context';
 import type { DiagramNode } from '../core/types';
 import { portPos, bestSides } from '../core/state';
-import { esc } from '../core/config';
+import { esc, nodeFill } from '../core/config';
 import { orthoPath, midOf } from '../render/wires';
 
 interface ThemeColors {
@@ -30,7 +30,7 @@ export interface ExportApi {
 /** Render a single node to SVG markup. */
 export function nodeSVG(n: DiagramNode, x: number, y: number, th: ThemeColors): string {
   const cx = x + n.w / 2, cy = y + n.h / 2;
-  const fill = n.color || th.node;
+  const fill = nodeFill(n) || th.node;
   const stroke = th.stroke;
   const txt = (label: string, tx: number, ty: number, color: string, size = 13): string =>
     `<text x="${tx}" y="${ty}" fill="${color}" font-size="${size}" text-anchor="middle" dominant-baseline="middle">${esc(label)}</text>`;

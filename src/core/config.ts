@@ -31,6 +31,33 @@ export const KIND_SHAPE: Record<NodeKind, ShapeKind> = {
   event: 'circle',
 };
 
+/**
+ * Subtle fill tint per semantic kind, so a node's construct reads at a glance
+ * and same-kind nodes form a visual family across the canvas. Muted darks in
+ * the same register as PALETTE; light label text stays readable on them. Used
+ * only when a node has no explicit custom colour (see `nodeFill`).
+ */
+export const KIND_TINT: Record<NodeKind, string> = {
+  component: '#25305a', // indigo
+  hook:      '#1f3a36', // teal
+  class:     '#34284a', // violet
+  store:     '#3a3122', // amber
+  module:    '#2b3340', // slate
+  function:  '#21372a', // green
+  type:      '#3a2630', // rose
+  service:   '#1f3340', // steel
+  event:     '#3a2545', // magenta
+};
+
+/**
+ * Effective fill for a node: an explicit custom colour always wins; otherwise
+ * the node's kind supplies a tint; otherwise null (theme default). Render and
+ * export both go through this so the canvas and the PNG/SVG agree.
+ */
+export function nodeFill(n: { color: string | null; kind?: NodeKind | null }): string | null {
+  return n.color ?? (n.kind ? KIND_TINT[n.kind] : null);
+}
+
 /** Short badge text shown on a node's corner for each kind. */
 export const KIND_BADGE: Record<NodeKind, string> = {
   component: 'cmp',
