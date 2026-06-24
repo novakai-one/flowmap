@@ -14,7 +14,7 @@ import type { AppContext } from '../core/context';
 import type { ShapeKind } from '../core/types';
 import type { SelectionApi } from './selection';
 import type { CameraApi } from '../core/camera';
-import { DEFAULTS, PALETTE } from '../core/config';
+import { DEFAULTS, PALETTE, SHAPE_KIND } from '../core/config';
 import { snapV, childIdsOf } from '../core/state';
 
 export interface NodesApi {
@@ -50,6 +50,8 @@ export function initNodes(ctx: AppContext, selection: SelectionApi, camera: Came
     }
     state.nodes[id] = {
       id, label: opts.label ?? d.label, shape,
+      // kind is mandatory; a shape implies a default construct (editable later)
+      kind: SHAPE_KIND[shape],
       color: PALETTE[0],
       x: snapV(wx, ctx.snap), y: snapV(wy, ctx.snap), w: d.w, h: d.h,
       parent: container,

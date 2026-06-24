@@ -32,16 +32,18 @@ export interface LayoutApi {
 }
 
 /** Gap between siblings within one layer. */
-const SIBLING_GAP = 120;
+const SIBLING_GAP = 150;
 /** Gap between consecutive layers. */
-const LAYER_GAP = 150;
+const LAYER_GAP = 200;
 /** Gap between a node box and its frontmatter card (CSS uses 6). */
 const CARD_GAP = 6;
 /** Canvas origin for the whole layout. */
 const ORIGIN_X = 80;
 const ORIGIN_Y = 80;
 /** Padding between a group box and the members it wraps. */
-const GROUP_PAD = 24;
+const GROUP_PAD = 34;
+/** Extra top space reserved inside a group box for its title tab. */
+const GROUP_LABEL_PAD = 26;
 /** Barycenter ordering sweeps (down-only; more = tidier, slower). */
 const CROSS_SWEEPS = 2;
 
@@ -346,9 +348,10 @@ export function initLayout(ctx: AppContext, camera: CameraApi): LayoutApi {
       }
       const G = state.nodes[g];
       G.x = snapV(minX - GROUP_PAD, ctx.snap);
-      G.y = snapV(minY - GROUP_PAD, ctx.snap);
+      // extra top pad so the title tab sits clear above the first member
+      G.y = snapV(minY - GROUP_PAD - GROUP_LABEL_PAD, ctx.snap);
       G.w = (maxX - minX) + GROUP_PAD * 2;
-      G.h = (maxY - minY) + GROUP_PAD * 2;
+      G.h = (maxY - minY) + GROUP_PAD * 2 + GROUP_LABEL_PAD;
     }
   }
 

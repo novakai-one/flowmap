@@ -9,7 +9,7 @@
 
 import type { AppContext } from './context';
 import type { Prefs } from './types';
-import { LS_KEY, PREF_KEY } from './config';
+import { LS_KEY, PREF_KEY, DEFAULT_PREFS } from './config';
 import { normalizeFrontmatter } from './frontmatter';
 
 export interface PersistenceApi {
@@ -58,6 +58,9 @@ export function loadPrefs(prefs: Prefs): void {
   try {
     const raw = localStorage.getItem(PREF_KEY);
     if (raw) Object.assign(prefs, JSON.parse(raw));
+    // migrate the legacy 260px frontmatter-card default (too narrow; wrapped
+    // type names) up to the current default — nobody picked 260 on purpose
+    if (prefs.fmWidth === 260) prefs.fmWidth = DEFAULT_PREFS.fmWidth;
   } catch { /* ignore */ }
 }
 

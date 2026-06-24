@@ -90,6 +90,7 @@ export function initWires(ctx: AppContext): { drawWires: () => void } {
     const obstacles: Obstacle[] = [];
     for (const id of memberIds) {
       const n = state.nodes[id];
+      if (n.shape === 'group') continue;   // group fill is a backdrop, not an obstacle
       const card = ctx.prefs.showFrontmatter
         ? world.querySelector<HTMLElement>(`.node[data-id="${id}"] .fmcard`)
         : null;
@@ -104,7 +105,7 @@ export function initWires(ctx: AppContext): { drawWires: () => void } {
         <path d="M0,0 L7,3 L0,6 Z" fill="var(--edge)"/>
       </marker>
       <marker id="arrowSel" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
-        <path d="M0,0 L7,3 L0,6 Z" fill="var(--sel)"/>
+        <path d="M0,0 L7,3 L0,6 Z" fill="var(--edge-sel)"/>
       </marker>
       <marker id="arrowInc" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
         <path d="M0,0 L7,3 L0,6 Z" fill="var(--accent-2)"/>
@@ -193,11 +194,26 @@ export function initWires(ctx: AppContext): { drawWires: () => void } {
       hit.dataset.eid = e.id;
       wires.appendChild(hit);
 
+      // selected edge: a soft wide halo underneath so the bright core reads
+      // clearly against nodes and the grid — the single-select equivalent of
+      // the multi-select highlight's impact
+      if (sel) {
+        const halo = document.createElementNS(SVG_NS, 'path');
+        halo.setAttribute('d', d);
+        halo.setAttribute('stroke', 'var(--edge-sel)');
+        halo.setAttribute('stroke-width', '11');
+        halo.setAttribute('stroke-linejoin', 'round');
+        halo.setAttribute('stroke-linecap', 'round');
+        halo.setAttribute('fill', 'none');
+        halo.setAttribute('opacity', '0.22');
+        wires.appendChild(halo);
+      }
+
       const path = document.createElementNS(SVG_NS, 'path');
       path.setAttribute('d', d);
-      path.setAttribute('stroke', sel ? 'var(--sel)' : incident ? 'var(--accent-2)' : onTrace ? 'var(--accent)' : 'var(--edge)');
-      path.setAttribute('stroke-width', String(e.style === 'thick' ? 3 : (incident || onTrace) ? 2.6 : 1.7));
-      path.setAttribute('stroke-dasharray', e.style === 'dotted' ? '5 5' : '0');
+      path.setAttribute('stroke', sel ? 'var(--edge-sel)' : incident ? 'var(--accent-2)' : onTrace ? 'var(--accent)' : 'var(--edge)');
+      path.setAttribute('stroke-width', String(sel ? 3.4 : e.style === 'thick' ? 3 : (incident || onTrace) ? 2.6 : 1.7));
+      path.setAttribute('stroke-dasharray', e.style === 'dotted' && !sel ? '5 5' : '0');
       path.setAttribute('fill', 'none');
       path.setAttribute('marker-end', sel ? 'url(#arrowSel)' : incident ? 'url(#arrowInc)' : 'url(#arrow)');
       path.setAttribute('stroke-linejoin', 'round');
@@ -226,9 +242,9 @@ export function initWires(ctx: AppContext): { drawWires: () => void } {
           // float the label off any node footprint or nearby label
           let step = 0;
           const nearLabel = (yy: number): boolean =>
-            placedLabels.some((pl) => Math.abs(pl.x - lx) < 60 && Math.abs(pl.y - yy) < 16);
-          while ((overNode(lx, ly) || nearLabel(ly)) && step < 12) {
-            step++; ly = anchor.y + (step % 2 ? 1 : -1) * Math.ceil(step / 2) * 18;
+            placedLabels.some((pl) => Math.abs(pl.x - lx) < 72 && Math.abs(pl.y - yy) < 20);
+          while ((overNode(lx, ly) || nearLabel(ly)) && step < 18) {
+            step++; ly = anchor.y + (step % 2 ? 1 : -1) * Math.ceil(step / 2) * 20;
           }
           placedLabels.push({ x: lx, y: ly });
         }
