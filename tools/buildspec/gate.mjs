@@ -31,17 +31,16 @@ function main() {
   const codePath = arg('--code');
   const warnAsError = process.argv.includes('--warn-as-error');
   if (!specPath || !codePath) {
-    console.error('usage: gate.mjs --spec <spec.mmd> --code <extracted.mmd> [--warn-as-error] [--show-edges]');
+    console.error('usage: gate.mjs --spec <spec.mmd> --code <extracted.mmd> [--warn-as-error] [--show-edges] [--unplanned-as-warning]');
     process.exit(2);
   }
 
   const spec = parseMmd(readFileSync(specPath, 'utf8'));
   const code = parseMmd(readFileSync(codePath, 'utf8'));
   const showEdges = process.argv.includes('--show-edges');
-  const { errors, warns } = diffSkeletons(
-    specSkeletons(spec), specSkeletons(code),
-    showEdges ? { specEdges: spec.edges, codeEdges: code.edges } : {},
-  );
+  const opts = { unplannedAsWarning: process.argv.includes('--unplanned-as-warning') };
+  if (showEdges) { opts.specEdges = spec.edges; opts.codeEdges = code.edges; }
+  const { errors, warns } = diffSkeletons(specSkeletons(spec), specSkeletons(code), opts);
 
   if (warns.length) {
     console.log(`warnings (${warns.length}):`);

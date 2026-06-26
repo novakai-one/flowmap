@@ -58,7 +58,7 @@ export function diffSkeletons(specMap, codeMap, opts = {}) {
   }
 
   for (const id of codeIds) {
-    if (!specMap[id]) errors.push(`unplanned: symbol "${id}" (kind ${codeMap[id].kind}) has no spec node`);
+    if (!specMap[id]) (opts.unplannedAsWarning ? warns : errors).push(`unplanned: symbol "${id}" (kind ${codeMap[id].kind}) has no spec node`);
   }
 
   // edges — informational only
