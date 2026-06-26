@@ -8,3 +8,6 @@ src/**/*.js
 # buildspec pipeline — generated stub output (regenerate with `npm run spec:stubs`)
 tools/buildspec/__demo_out/
 *.extracted.mmd
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
+*.tsbuildinfo
