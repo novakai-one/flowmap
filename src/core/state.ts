@@ -13,6 +13,21 @@
 import type { DiagramNode, PortSide, Point, FlowDir } from './types';
 import { SIDE_MULT, GRID } from './config';
 
+/** Gap between a node box and its frontmatter card (CSS .fmcard uses 6). */
+export const CARD_GAP = 6;
+
+/**
+ * Last measured size of a node's frontmatter card (its own offsetWidth/
+ * offsetHeight, unscaled by camera zoom). Written ONLY by render's post-paint
+ * measure pass; read by footprint consumers (wires obstacles, avoid-router,
+ * Tidy). This is the model's record of a derived-but-not-computable quantity:
+ * the card wraps its content, so its size can't be derived from x/y/w/h alone.
+ */
+export interface MeasuredCard {
+  cardW: number;
+  cardH: number;
+}
+
 export interface StateStore {
   nodes: Record<string, DiagramNode>;
   edges: import('./types').DiagramEdge[];
@@ -26,11 +41,42 @@ export interface StateStore {
   dir: FlowDir;
   /** declared layout entry nodes (from `%% root` lines); drive Tidy's layer 0 */
   roots: string[];
+  /**
+   * Measured frontmatter-card sizes, keyed by node id. Populated by render's
+   * post-paint measure pass; NOT serialised (re-measured on next render). An
+   * absent entry means "no card / not yet measured" — readers fall back to the
+   * node box (n.w/n.h), so geometry never reads from the DOM.
+   */
+  measured: Map<string, MeasuredCard>;
 }
 
 /** Create a fresh, empty model. */
 export function createState(): StateStore {
-  return { nodes: {}, edges: [], sel: new Set<string>(), selEdge: null, nid: 1, eid: 1, dir: 'TD', roots: [] };
+  return {
+    nodes: {}, edges: [], sel: new Set<string>(), selEdge: null,
+    nid: 1, eid: 1, dir: 'TD', roots: [], measured: new Map<string, MeasuredCard>(),
+  };
+}
+
+/* ---------- rendered footprint (box + frontmatter card) ---------- */
+
+/** A node's on-canvas footprint rect in world pixels, card included. */
+export interface Footprint { x: number; y: number; w: number; h: number; }
+
+/**
+ * Rendered footprint of a node, box plus frontmatter card, read from the
+ * model alone (the card size comes from `state.measured`, populated by the
+ * post-render measure pass — never read live from the DOM). The card hangs
+ * below the box and is centred on it: width = max(box, card), height = box +
+ * gap + card. When the card isn't shown or hasn't been measured yet, the
+ * footprint is just the box, so callers always get finite numbers.
+ */
+export function nodeFootprint(state: StateStore, n: DiagramNode, showFrontmatter: boolean): Footprint {
+  const m = showFrontmatter ? state.measured.get(n.id) : undefined;
+  if (!m) return { x: n.x, y: n.y, w: n.w, h: n.h };
+  const w = Math.max(n.w, m.cardW);
+  const h = n.h + CARD_GAP + m.cardH;
+  return { x: n.x - (w - n.w) / 2, y: n.y, w, h };
 }
 
 /* ---------- snap ---------- */

@@ -113,6 +113,52 @@ export function initRender(ctx: AppContext, drawWires: () => void): RenderApi {
   const { world } = ctx.dom;
   const statusEl = document.getElementById('status') as HTMLElement;
 
+  // Persistent node-element cache: model id -> rendered element. This is the
+  // core of the keyed diff. render() no longer destroys and rebuilds every
+  // node each call; it keeps element identity stable, removes only ids that
+  // left the level, creates only new ids, and patches the rest in place. A
+  // node's inner DOM is rebuilt only when its structural signature changes —
+  // otherwise just its className + geometry are touched (cheap). Stable
+  // identity is why a position written by the drag fast-path, or an
+  // in-progress inline edit, survives a render instead of being blown away.
+  const nodeEls = new Map<string, HTMLElement>();
+
+  // Post-render measure pass (Phase 2). A frontmatter card wraps its content,
+  // so its rendered size is the ONE node quantity that can't be derived from
+  // the model's x/y/w/h. Rather than let wires/layout read it live from the
+  // DOM (the old desync source), we measure it ONCE per paint here, in a
+  // batched rAF, and store it in state.measured. Readers (wires obstacles,
+  // avoid-router, Tidy) then size footprints from the model alone. If a
+  // measurement changed (first paint, fm edit, frontmatter toggle) we redraw
+  // wires once so label-avoidance/obstacles match — drawWires only, never
+  // render(), so this never loops.
+  let measureScheduled = false;
+  function scheduleMeasure(): void {
+    if (measureScheduled) return;
+    measureScheduled = true;
+    requestAnimationFrame(() => { measureScheduled = false; measureCards(); });
+  }
+  function measureCards(): void {
+    const { state } = ctx;
+    let changed = false;
+    for (const [id, el] of nodeEls) {
+      const card = el.querySelector<HTMLElement>(':scope > .fmcard');
+      if (card) {
+        const cardW = card.offsetWidth, cardH = card.offsetHeight;
+        const prev = state.measured.get(id);
+        if (!prev || prev.cardW !== cardW || prev.cardH !== cardH) {
+          state.measured.set(id, { cardW, cardH });
+          changed = true;
+        }
+      } else if (state.measured.has(id)) {
+        // visible node with no card (frontmatter off / empty): drop any stale size
+        state.measured.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) drawWires();
+  }
+
   function updateStatus(): void {
     const nc = Object.keys(ctx.state.nodes).length, ec = ctx.state.edges.length;
     let s = `${nc} node${nc !== 1 ? 's' : ''} · ${ec} edge${ec !== 1 ? 's' : ''}`;
@@ -120,105 +166,144 @@ export function initRender(ctx: AppContext, drawWires: () => void): RenderApi {
     statusEl.textContent = s;
   }
 
+  const isSvgShape = (n: DiagramNode): boolean =>
+    n.shape === 'diamond' || n.shape === 'hex' || n.shape === 'cylinder';
+
+  // className is derived from model + selection/trace/link/edit state and is
+  // patched on every render (cheap, never a structural change).
+  function classFor(n: DiagramNode, id: string, isContainer: boolean, traced: string | null): string {
+    const { state, runtime } = ctx;
+    const traceCls = traced ? (nodeUsesType(n.fm, traced) ? ' trace-hit' : ' trace-dim') : '';
+    return 'node shape-' + n.shape + (isSvgShape(n) ? ' svgshape' : '')
+      + (state.sel.has(id) ? ' selected' : '') + (runtime.linkSrc === id ? ' linksrc' : '')
+      + (isContainer ? ' is-container' : '') + (runtime.editingId === id ? ' editing' : '') + traceCls;
+  }
+
+  // Everything buildInner() depends on. When unchanged across renders the inner
+  // DOM is left alone and only className + geometry are patched.
+  function nodeSig(n: DiagramNode, id: string, isContainer: boolean, traced: string | null): string {
+    const single = ctx.state.sel.has(id) && ctx.state.sel.size === 1;   // drives resize handles
+    const kids = childIdsOf(ctx.state, id).length;                      // drives the enter-btn count
+    const fmPart = ctx.prefs.showFrontmatter && n.fm && !isFrontmatterEmpty(n.fm) ? JSON.stringify(n.fm) : '';
+    const dims = isSvgShape(n) ? `${n.w}x${n.h}` : '';                  // svg shape markup depends on size
+    return [n.shape, n.label, n.kind ?? '', single ? 's' : '', isContainer ? 'c' : '', kids, dims, traced ?? '', nodeFill(n) ?? '', fmPart].join('\u0001');
+  }
+
+  // (re)build the inner DOM of a node element from the model
+  function buildInner(el: HTMLElement, n: DiagramNode, id: string, isContainer: boolean, traced: string | null): void {
+    const { state } = ctx;
+    el.textContent = '';   // clear previous inner (children + text)
+
+    if (isSvgShape(n)) el.insertAdjacentHTML('beforeend', shapeMarkup(n));
+
+    const lab = document.createElement('span');
+    lab.className = 'label';
+    lab.textContent = n.label;
+    el.appendChild(lab);   // contenteditable is toggled in render(), not here
+
+    // semantic kind badge (corner chip)
+    if (n.kind) {
+      const kb = document.createElement('span');
+      kb.className = 'kindbadge';
+      kb.textContent = KIND_BADGE[n.kind];
+      el.appendChild(kb);
+    }
+
+    // drill-in affordance: open this node's internal level. Skipped for groups,
+    // notes, and the container itself (you're already inside it).
+    if (n.shape !== 'group' && n.shape !== 'note' && !isContainer) {
+      const kids = childIdsOf(state, id).length;
+      const enter = document.createElement('button');
+      enter.className = 'enter-btn' + (kids ? ' has-kids' : '');
+      enter.title = kids ? `Open internals (${kids})` : 'Open internals';
+      enter.textContent = kids ? String(kids) : '\u21f2';
+      enter.onpointerdown = (ev) => ev.stopPropagation();
+      enter.onclick = (ev) => { ev.stopPropagation(); ctx.hooks.enterContainer(id); };
+      el.appendChild(enter);
+    }
+
+    // ports
+    (['pt', 'pb', 'pl', 'pr'] as const).forEach((p) => {
+      const port = document.createElement('div');
+      port.className = 'port ' + p;
+      port.dataset.port = id; port.dataset.side = p;
+      el.appendChild(port);
+    });
+
+    // resize handles only when single-selected
+    if (state.sel.has(id) && state.sel.size === 1) {
+      (['nw', 'ne', 'sw', 'se'] as const).forEach((c) => {
+        const h = document.createElement('div');
+        h.className = 'rsz ' + c; h.dataset.rsz = c; h.dataset.id = id;
+        el.appendChild(h);
+      });
+    }
+
+    // frontmatter card: an overlay BELOW the node, outside its box model, so
+    // showing/hiding it never changes node size or spacing
+    if (ctx.prefs.showFrontmatter && n.fm && !isFrontmatterEmpty(n.fm)) {
+      el.appendChild(buildFmCard(n.fm, traced));
+    }
+  }
+
   function render(): void {
     const { state, runtime } = ctx;
     // if the focused container was removed (e.g. via undo), fall back to root
     if (ctx.view.container && !state.nodes[ctx.view.container]) ctx.view.container = null;
-    // remove old nodes + edge labels but keep the <svg> wires element
-    [...world.querySelectorAll('.node, .edgelabel, .boundary-stub, .level-root')].forEach((e) => e.remove());
+    const container = ctx.view.container;
+    const traced = runtime.tracedType;
 
     // nodes at the current drill level; groups first (z-order). The drilled
     // container itself is appended last so it renders as a real, interactive
     // node (the level anchor) above its children.
-    const container = ctx.view.container;
     const ids = childIdsOf(state, container).sort((a, b) =>
       (state.nodes[a].shape === 'group' ? 0 : 1) - (state.nodes[b].shape === 'group' ? 0 : 1));
     if (container && state.nodes[container]) ids.push(container);
+    const desired = new Set(ids);
 
-    const traced = runtime.tracedType;
+    // remove cached elements whose id is no longer shown at this level
+    for (const [id, el] of nodeEls) {
+      if (!desired.has(id)) { el.remove(); nodeEls.delete(id); }
+    }
 
+    // create new / patch existing, then re-append in order (moves, not rebuilds)
     for (const id of ids) {
       const n = state.nodes[id];
-      const el = document.createElement('div');
-      const isSel = state.sel.has(id);
       const isContainer = id === container;
-      const svgShape = (n.shape === 'diamond' || n.shape === 'hex' || n.shape === 'cylinder');
-      const traceCls = traced
-        ? (nodeUsesType(n.fm, traced) ? ' trace-hit' : ' trace-dim')
-        : '';
-      el.className = 'node shape-' + n.shape + (svgShape ? ' svgshape' : '')
-        + (isSel ? ' selected' : '') + (runtime.linkSrc === id ? ' linksrc' : '')
-        + (isContainer ? ' is-container' : '') + traceCls;
-      el.dataset.id = id;
+      const sig = nodeSig(n, id, isContainer, traced);
+
+      let el = nodeEls.get(id);
+      if (!el) {
+        el = document.createElement('div');
+        el.dataset.id = id;
+        nodeEls.set(id, el);
+        buildInner(el, n, id, isContainer, traced);
+        el.dataset.sig = sig;
+      } else if (el.dataset.sig !== sig && runtime.editingId !== id) {
+        // structural change (and not mid-edit): rebuild this node's inner DOM
+        buildInner(el, n, id, isContainer, traced);
+        el.dataset.sig = sig;
+      }
+
+      // always-cheap patches: className + geometry + fill
+      el.className = classFor(n, id, isContainer, traced);
       el.style.left = n.x + 'px';
       el.style.top = n.y + 'px';
       el.style.width = n.w + 'px';
       el.style.height = n.h + 'px';
-      // fill (custom colour, else kind tint): simple shapes paint the div,
-      // svg shapes paint the path via shapeMarkup
       const fill = nodeFill(n);
-      if (fill && !svgShape && n.shape !== 'group' && n.shape !== 'note') el.style.background = fill;
+      el.style.background = (fill && !isSvgShape(n) && n.shape !== 'group' && n.shape !== 'note') ? fill : '';
 
-      if (svgShape) el.insertAdjacentHTML('beforeend', shapeMarkup(n));
-
-      const lab = document.createElement('span');
-      lab.className = 'label';
-      lab.textContent = n.label;
-      el.appendChild(lab);
-      // keep an in-progress inline edit alive across re-renders
-      if (runtime.editingId === id) {
-        el.classList.add('editing');
-        lab.setAttribute('contenteditable', 'true');
+      // toggle inline-edit contenteditable on the persistent label (independent
+      // of inner rebuild, so starting/ending an edit always lands correctly)
+      const lab = el.querySelector<HTMLElement>(':scope > .label');
+      if (lab) {
+        if (runtime.editingId === id) lab.setAttribute('contenteditable', 'true');
+        else lab.removeAttribute('contenteditable');
       }
 
-      // semantic kind badge (corner chip)
-      if (n.kind) {
-        const kb = document.createElement('span');
-        kb.className = 'kindbadge';
-        kb.textContent = KIND_BADGE[n.kind];
-        el.appendChild(kb);
-      }
-
-      // drill-in affordance: open this node's internal level. Skipped for
-      // groups, notes, and the container itself (you're already inside it).
-      if (n.shape !== 'group' && n.shape !== 'note' && !isContainer) {
-        const kids = childIdsOf(state, id).length;
-        const enter = document.createElement('button');
-        enter.className = 'enter-btn' + (kids ? ' has-kids' : '');
-        enter.title = kids ? `Open internals (${kids})` : 'Open internals';
-        enter.textContent = kids ? String(kids) : '\u21f2';
-        enter.onpointerdown = (ev) => ev.stopPropagation();
-        enter.onclick = (ev) => { ev.stopPropagation(); ctx.hooks.enterContainer(id); };
-        el.appendChild(enter);
-      }
-
-      // ports
-      (['pt', 'pb', 'pl', 'pr'] as const).forEach((p) => {
-        const port = document.createElement('div');
-        port.className = 'port ' + p;
-        port.dataset.port = id; port.dataset.side = p;
-        el.appendChild(port);
-      });
-
-      // resize handles only when single-selected
-      if (isSel && state.sel.size === 1) {
-        (['nw', 'ne', 'sw', 'se'] as const).forEach((c) => {
-          const h = document.createElement('div');
-          h.className = 'rsz ' + c; h.dataset.rsz = c; h.dataset.id = id;
-          el.appendChild(h);
-        });
-      }
-
-      // frontmatter card: an overlay BELOW the node, outside its box model,
-      // so showing/hiding it never changes node size or spacing
-      if (ctx.prefs.showFrontmatter && n.fm && !isFrontmatterEmpty(n.fm)) {
-        el.appendChild(buildFmCard(n.fm, traced));
-      }
-
-      world.appendChild(el);
+      world.appendChild(el);   // reorder existing into place; append new
     }
-
-    // (the drilled container is now rendered as a real node in the loop above)
 
     // empty-state hint when a drilled container has no internals yet
     const emptyEl = document.getElementById('levelEmpty');
@@ -236,6 +321,10 @@ export function initRender(ctx: AppContext, drawWires: () => void): RenderApi {
     drawWires();
     updateStatus();
     ctx.hooks.drawMinimap();
+
+    // after this paint, measure each card once and reconcile the model; a
+    // changed size triggers a single wire redraw (see scheduleMeasure)
+    scheduleMeasure();
   }
 
   return { render, updateStatus };

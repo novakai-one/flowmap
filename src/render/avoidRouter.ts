@@ -40,6 +40,7 @@ import { init, routeEdges } from '@mr_mint/elkjs-libavoid';
 import type { ElkGraph, ElkNode, ElkEdge, LibavoidRouterOptions } from '@mr_mint/elkjs-libavoid';
 import type { AppContext } from '../core/context';
 import type { Point, DiagramNode } from '../core/types';
+import { nodeFootprint } from '../core/state';
 import type { RouteReq, RouteRes } from './avoidWorker';
 import wasmUrl from './libavoid.wasm?url';
 
@@ -65,8 +66,6 @@ const routeCache = new Map<string, CachedRoute>();
 const SHAPE_BUFFER = 4;
 /** Spacing libavoid keeps between parallel wire segments. */
 const NUDGE_GAP = 16;
-/** Box-to-card vertical gap (CSS uses 6). */
-const CARD_GAP = 6;
 
 let wasmReady: Promise<void> | null = null;
 
@@ -95,15 +94,14 @@ function sanitizeRect(id: string, x: number, y: number, w: number, h: number): E
   return { id, x: fx, y: fy, width: fw, height: fh };
 }
 
-/** Rendered footprint rect of a node, including its frontmatter card. */
+/**
+ * Rendered footprint rect of a node, including its frontmatter card. Sizes
+ * come from the model (state.measured) via nodeFootprint — never read live
+ * from the DOM — so the obstacle set always matches what render last painted.
+ */
 function footprintRect(ctx: AppContext, n: DiagramNode, id: string): ElkNode {
-  const el = ctx.dom.world.querySelector<HTMLElement>(`.node[data-id="${id}"]`);
-  const card = ctx.prefs.showFrontmatter && el
-    ? el.querySelector<HTMLElement>('.fmcard')
-    : null;
-  const w = card ? Math.max(n.w, card.offsetWidth) : n.w;
-  const h = card ? n.h + CARD_GAP + card.offsetHeight : n.h;
-  return sanitizeRect(id, n.x - (w - n.w) / 2, n.y, w, h);
+  const f = nodeFootprint(ctx.state, n, ctx.prefs.showFrontmatter);
+  return sanitizeRect(id, f.x, f.y, f.w, f.h);
 }
 
 /** Every non-group edge is routed: spine edges too, so straight lines never

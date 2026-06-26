@@ -10,7 +10,7 @@
 
 import type { AppContext } from '../core/context';
 import type { PortSide, Point, DiagramEdge, DiagramNode } from '../core/types';
-import { portPos, bestSides, containerOf, childIdsOf } from '../core/state';
+import { portPos, bestSides, containerOf, childIdsOf, nodeFootprint } from '../core/state';
 import { nodeUsesType } from '../core/frontmatter';
 import { routeFor } from './avoidRouter';
 
@@ -73,7 +73,7 @@ export function labelAnchor(d: string): Point {
 /** Rectangle a node occupies on canvas, including its frontmatter card. */
 interface Obstacle { x: number; y: number; w: number; h: number; }
 
-export function initWires(ctx: AppContext): { drawWires: () => void } {
+export function initWires(ctx: AppContext): { drawWires: () => void; updateWiresFor: (movedIds: Set<string>) => void } {
   const { wires, world } = ctx.dom;
 
   function drawWires(): void {
@@ -92,17 +92,15 @@ export function initWires(ctx: AppContext): { drawWires: () => void } {
     const memberIds = container && state.nodes[container]
       ? [...childIdsOf(state, container), container]
       : childIdsOf(state, container);
-    // node footprints (box + frontmatter card) used to keep labels off nodes
+    // node footprints (box + frontmatter card) used to keep labels off nodes.
+    // Sizes come from the model (state.measured, populated by render's measure
+    // pass) — never read live from the DOM, so labels can't desync from layout.
     const obstacles: Obstacle[] = [];
     for (const id of memberIds) {
       const n = state.nodes[id];
       if (n.shape === 'group') continue;   // group fill is a backdrop, not an obstacle
-      const card = ctx.prefs.showFrontmatter
-        ? world.querySelector<HTMLElement>(`.node[data-id="${id}"] .fmcard`)
-        : null;
-      const w = Math.max(n.w, card ? card.offsetWidth : n.w);
-      const h = card ? n.h + 6 + card.offsetHeight : n.h;
-      obstacles.push({ x: n.x - (w - n.w) / 2, y: n.y, w, h });
+      const f = nodeFootprint(state, n, ctx.prefs.showFrontmatter);
+      obstacles.push({ x: f.x, y: f.y, w: f.w, h: f.h });
     }
     const overNode = (x: number, y: number): boolean =>
       obstacles.some((o) => x > o.x - 28 && x < o.x + o.w + 28 && y > o.y - 10 && y < o.y + o.h + 10);

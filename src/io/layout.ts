@@ -24,7 +24,7 @@
 import type { AppContext } from '../core/context';
 import type { CameraApi } from '../core/camera';
 import type { FlowDir, DiagramEdge } from '../core/types';
-import { snapV } from '../core/state';
+import { snapV, nodeFootprint } from '../core/state';
 import { routeReferences } from '../render/avoidRouter';
 
 export interface LayoutApi {
@@ -35,8 +35,6 @@ export interface LayoutApi {
 const SIBLING_GAP = 150;
 /** Gap between consecutive layers. */
 const LAYER_GAP = 200;
-/** Gap between a node box and its frontmatter card (CSS uses 6). */
-const CARD_GAP = 6;
 /** Canvas origin for the whole layout. */
 const ORIGIN_X = 80;
 const ORIGIN_Y = 80;
@@ -64,21 +62,18 @@ export function initLayout(ctx: AppContext, camera: CameraApi): LayoutApi {
   const { state } = ctx;
 
   /**
-   * Measure a node's on-canvas footprint in layout pixels. offsetWidth/
-   * Height are unscaled by camera zoom, so they are true world sizes. The
-   * card hangs below the node and is centred on it: width = max(box, card),
-   * height = box + card.
+   * A node's on-canvas footprint in layout pixels (box + frontmatter card).
+   * Sizes come from the model (state.measured, populated by render's measure
+   * pass) via nodeFootprint — never read live from the DOM. The card hangs
+   * below the node and is centred on it: width = max(box, card), height = box
+   * + gap + card. Nodes not currently rendered (off-level) have no measured
+   * card, so they fall back to the box — exactly as the old DOM query did when
+   * the element wasn't present.
    */
   function footprint(id: string): Footprint {
     const n = state.nodes[id];
-    const el = ctx.dom.world.querySelector<HTMLElement>(`.node[data-id="${id}"]`);
-    if (!el) return { w: n.w, h: n.h };
-    const card = el.querySelector<HTMLElement>('.fmcard');
-    if (!card) return { w: el.offsetWidth, h: el.offsetHeight };
-    return {
-      w: Math.max(el.offsetWidth, card.offsetWidth),
-      h: el.offsetHeight + CARD_GAP + card.offsetHeight,
-    };
+    const f = nodeFootprint(state, n, ctx.prefs.showFrontmatter);
+    return { w: f.w, h: f.h };
   }
 
   /** Which non-group nodes belong to each group: structural parent first, geometry as fallback. */
