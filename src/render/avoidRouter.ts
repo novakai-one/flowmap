@@ -41,8 +41,17 @@ interface CachedRoute {
 /** edge id -> last good route. Replaced wholesale on each Tidy. */
 const routeCache = new Map<string, CachedRoute>();
 
-/** Padding libavoid keeps between a wire and any node rect. */
-const SHAPE_BUFFER = 14;
+/**
+ * Padding libavoid keeps between a wire and any node rect.
+ * Lowered 14 -> 4 (FIX 2B): with frontmatter cards on, the inflated card
+ * footprints are densely packed; a 14px buffer made the *buffered* rects
+ * overlap heavily (85 overlapping pairs on the Novakai graph), which forced
+ * libavoid through its expensive orthogonal-exception path (~1.6s vs ~0.11s
+ * measured on the real graph). 4px keeps the full card as an obstacle — so
+ * wires still avoid every card — while removing the buffered-rect overlap
+ * that triggered the throws. Do not raise back above ~6 (timing cliff).
+ */
+const SHAPE_BUFFER = 4;
 /** Spacing libavoid keeps between parallel wire segments. */
 const NUDGE_GAP = 16;
 /** Box-to-card vertical gap (CSS uses 6). */
@@ -149,8 +158,10 @@ export async function routeReferences(ctx: AppContext, opts?: RouteOptions): Pro
   // time. Dropping the trace depth around the wasm call removes that cost
   // and changes no routing output. Restored in finally so the rest of the
   // app keeps normal error traces.
-  const prevStackLimit = Error.stackTraceLimit;
-  Error.stackTraceLimit = 0;
+  // Error.stackTraceLimit is a V8 extension not in the standard lib types.
+  const ErrV8 = Error as { stackTraceLimit?: number };
+  const prevStackLimit = ErrV8.stackTraceLimit;
+  ErrV8.stackTraceLimit = 0;
   try {
     await ensureRouter();
     const routes = await routeEdges(graph, {
@@ -173,7 +184,7 @@ export async function routeReferences(ctx: AppContext, opts?: RouteOptions): Pro
     if (!scope) routeCache.clear();
     console.warn('[avoidRouter] routing failed; using fallback elbows', err);
   } finally {
-    Error.stackTraceLimit = prevStackLimit;
+    ErrV8.stackTraceLimit = prevStackLimit;
   }
 }
 

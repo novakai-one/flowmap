@@ -14,6 +14,7 @@
     "vite": "^8.0.16"
   },
   "dependencies": {
-    "@mr_mint/elkjs-libavoid": "^0.5.0"
+    "@mr_mint/elkjs-libavoid": "^0.5.0",
+    "@rolldown/binding-darwin-arm64": "^1.1.3"
   }
 }
