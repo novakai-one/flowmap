@@ -1,17 +1,43 @@
 # Flowmap
 
-A spatial diagram tool for reviewing a codebase's architecture. Drag-and-drop
-flowcharts with two-way Mermaid sync, per-node frontmatter cards (the public
-interface), semantic **kind** badges with colour tinting, type tracing across
-the canvas, click-a-node-to-light-its-connections, purpose **sections**,
-obstacle-avoiding wires, drill-in containment, a **source viewer** that shows
-each node's real TypeScript body, themes, minimap, undo/redo, autosave, and
-SVG/PNG export. Runs entirely in the browser; no backend.
+Flowmap is a spatial diagram tool for working with software architecture — and a
+bridge between you, your codebase, and an AI coding agent. You draw (or generate)
+a diagram in standard Mermaid syntax; that same diagram becomes three things at
+once: a **build spec** you hand to an AI, a **contract** that fails the build if
+the code drifts from it, and a **map** of an existing codebase you can read and
+inspect. It runs entirely in the browser, with no backend.
 
-Flowmap is format-agnostic: it loads any `.mmd` file written to the spec in
-[`SYNTAX_README.md`](SYNTAX_README.md). The rest of this README is the practical
-guide: how to wire it to *your own* repo, generate a diagram from your code, and
-see your source inside the app.
+It exists to solve three problems:
+
+### 1. Plan and communicate with an AI agent — visually
+
+Instead of writing long prose build plans, you compose the architecture as a
+diagram and hand it over. The diagram *is* the spec. To request a change, you
+drag and drop — add a node, redraw an edge — and export the `.mmd`. No essays,
+no ambiguity; the structure, the public interfaces, and the intended call order
+are all on the canvas in a format an AI already understands.
+
+### 2. Make AI code drift impossible
+
+A diagram's frontmatter declares every node's interface — its accepts and
+returns. Flowmap's tooling turns that into TypeScript stubs the agent fills in
+(it writes bodies, never signatures), then extracts the real code back into a
+diagram and **diffs it against the spec on every build**. If a signature drifts,
+an argument type changes, or scope creeps, the build fails. The enforcement is
+deterministic — no AI in the loop — so nothing slips through.
+
+### 3. Inspect and understand any codebase
+
+Point the extractor at a TypeScript project and it auto-generates a diagram from
+the real code. Click any node to read its actual source body and true signature,
+trace a type across the whole canvas, light up a node's connections, or drill
+into a module to see its internal call graph. You understand a system by
+navigating it, not by reading a wall of text.
+
+The same diagram serves all three. Flowmap is format-agnostic: it loads any
+`.mmd` file written to the spec in [`SYNTAX_README.md`](SYNTAX_README.md). The
+rest of this README is the practical guide: how to wire it to *your own* repo,
+generate a diagram from your code, and use each of the three capabilities.
 
 ---
 
@@ -273,6 +299,43 @@ npm run flowmap:gate        # fail if the diagram spec drifts from the code
 npm run flowmap:validate    # structural lint of the .mmd
 ```
 
+### Keeping the tooling and syntax in sync across repos
+
+The tools (`tools/flowmap`, `tools/buildspec`) and the syntax spec are copied
+into each consuming repo, which means they can go stale. Mitigations, in order of
+robustness:
+
+- **The validator is the real backstop.** `validate.mjs` encodes the grammar and
+  rejects malformed `.mmd` — so a slightly out-of-date `SYNTAX_README.md` can't
+  let bad syntax through. Run `flowmap:validate` in CI and the prose doc being a
+  little behind is low-risk.
+- **Best fix — make the tools a dependency, not a copy.** Publish
+  `tools/flowmap` + `tools/buildspec` + `SYNTAX_README.md` as one npm package (or
+  add Flowmap as a git submodule). Then `npm update` refreshes the bundler,
+  extractor, gate, validator, and the syntax doc together, versioned — copies
+  become installs.
+- **Stop-gap** — keep `SYNTAX_README.md` inside the `tools/` folder you copy, so
+  the doc travels with the tooling and refreshes in the same step.
+
+### Moving or reorganising folders
+
+File reorganisation is safe by design — identity is decoupled from location:
+
+- The bundler **discovers fragments by recursive glob** (`--dir src` finds every
+  `flowmap.mmd` anywhere under `src/`), so moving a folder within `src/` doesn't
+  break discovery.
+- **`@flowmap-node` ids live in the source files**, so they move with the code
+  and never change on a move.
+- The **container id is the join key** (`%% root <id>` ↔ a node in `root.mmd`),
+  matched by name, not path.
+- `_bundle.mmd` has **no saved coordinates** (Tidy positions on load), so there's
+  no stale geometry to disturb.
+
+The one thing that needs a touch: **renaming** a container id — update its node in
+`root.mmd`. The bundler warns if a fragment's `%% root` id has no node in
+`root.mmd` ("container will not attach"). Moving is free; renaming is a one-line
+edit with a guard-rail.
+
 ---
 
 ## 7. Authoring syntax cheat-sheet
@@ -343,82 +406,102 @@ autosaves to `localStorage`.
 
 ## 9. Current features
 
-- **Two-way Mermaid sync** — canvas and the `.mmd` text edit the same model.
-- **Load / Save `.mmd`** — round-trips the full spec format.
-- **Auto-layout (Tidy)** — layered tree from the solid spine; satellites parked
-  beside their reference; dotted edges routed around boxes.
-- **Obstacle-avoiding wires** — libavoid (WASM) orthogonal routing; draggable
+Grouped under the three things Flowmap is for. Everything here exists today.
+
+### Pillar 1 — Plan & communicate with an AI agent, visually
+
+- **Drag-and-drop authoring** — build the architecture by placing nodes and
+  drawing edges; no file editing required.
+- **Standard Mermaid syntax** — the diagram is plain `.mmd`, a format AI agents
+  already read and write. Full spec in [`SYNTAX_README.md`](SYNTAX_README.md).
+- **Two-way text ↔ canvas sync** — the canvas and the live Mermaid text edit the
+  same model; change either, the other follows.
+- **Export `.mmd` / Save / Load** — hand the file to an AI as the build spec, or
+  load one back. No prose build plan needed.
+- **Auto-layout (Tidy)** — a layered tree from the solid spine; satellites parked
+  beside what references them; dotted edges routed around boxes.
+- **Kind system** — `%% kind` per node drives a corner badge + automatic fill
+  tint, so one construct type reads as one visual family.
+- **Sections & drill-in containment** — `subgraph` groups cluster a level;
+  `%% parent` hides a unit's internals behind it, opened on demand.
+- **Obstacle-avoiding wires** — libavoid (WASM) orthogonal routing with draggable
   bends and labels; per-edge solid/dotted/thick and straight/orthogonal.
-- **Kind system** — required `%% kind` per node; corner badge + automatic fill
-  tint so one construct = one visual family.
-- **Frontmatter cards** — per-node public interface (name, desc, state,
-  interfaces with accepts/returns), toggleable.
-- **Type tracing** — click a type name on a card to highlight every node that
-  accepts/returns/holds that type.
-- **Connection highlight** — select a node to light its incident edges.
-- **Drill-in containment** — `%% parent` hides internals behind a node; open to
-  reveal the private call graph; cross-level edges draw as labelled boundary
-  stubs.
-- **Sections / groups** — `subgraph` clusters and purpose captions on a level.
-- **Source viewer** — click a node, see its real TypeScript body + a signature
-  header (real param types + return), fetched from `bodies.json`.
-- **Resizable side panel** — drag the panel edge; width persists.
-- **Themes** — base palettes + accent recolour, live `:root` repaint.
-- **Minimap**, **undo/redo**, **autosave**, **zoom-to-fit**, **snap-to-grid**.
-- **PNG / SVG export.**
-- **Tooling (in `tools/`):**
-  - `bundle.mjs` — merge per-folder fragments → one laid-out `.mmd`.
-  - `extract.mjs` — ts-morph → extracted `.mmd` + `bodies.json` (bodies +
-    real signatures).
-  - `gate.mjs` — diff spec vs extracted, fail on node/kind/member/return drift.
-  - `validate.mjs` — structural lint of any single `.mmd`.
-  - `spec-to-stubs.mjs` — generate TS stubs from `fm:meta` (signatures only).
+- **Themes, PNG/SVG export, resizable panel, minimap, undo/redo, autosave,
+  zoom-to-fit, snap-to-grid.**
+
+### Pillar 2 — Make AI code drift impossible (deterministic enforcement)
+
+- **Spec → TS stubs** (`spec-to-stubs.mjs`) — generates `interface` /
+  `abstract class` / function signatures from each node's `fm:meta` with the
+  exact accepts/returns and `throw new Error('unimplemented')` bodies. The agent
+  fills bodies, never signatures.
+- **Extract real code → `.mmd`** (`extract.mjs`) — ts-morph walks your TypeScript
+  and re-serializes the *actual* code (nodes, kind, parent, import edges) into a
+  diagram that cannot drift, because it is the code.
+- **Drift gate** (`gate.mjs`) — diffs the committed spec against the extracted
+  code and **fails on drift**: a spec node with no symbol (unbuilt), a signature
+  mismatch, a member/return-type change, or unplanned scope. Run it in CI.
+- **Argument + return-type checking** — interface drift becomes a `tsc` error
+  (from the stubs) and a gate failure (from the diff), continuously and for free.
+- **No AI in the enforcement loop** — every check is deterministic tooling, so a
+  drifted build can't be produced and nothing slips through.
+- **Structural validation** (`validate.mjs`) — lints any single `.mmd` (one
+  header, no duplicate ids, every reference resolves).
+
+### Pillar 3 — Inspect & understand any codebase
+
+- **Auto-generate a diagram from code** (`extract.mjs`) — point it at a TS
+  project and get an `.mmd` of the real structure, no manual authoring.
+- **Source viewer** — click a node to read its real TypeScript body, with a
+  **real signature header** (actual param types + return) above it, fetched from
+  `bodies.json`.
+- **Frontmatter cards** — each node's public interface (name, desc, owned state,
+  one or more entry points with accepts/returns), toggleable.
+- **Type tracing** — click a type name on a card to light up every node that
+  accepts, returns, or holds that type across the whole canvas.
+- **Connection highlight** — select a node to light all of its incident edges.
+- **Drill-in** — double-click a container (or right-click → Open internals) to
+  reveal its private call graph; cross-level edges draw as labelled boundary
+  stubs; `Esc` steps up; a breadcrumb shows depth.
 
 ---
 
 ## 10. Planned features
 
-From the build-workflow direction (`DIRECTION_ai_build_workflow.md`). The thesis:
-the `.mmd` is a **build contract**; all *enforcement* is deterministic tooling;
-an LLM sits only at the edges (planning, authoring), never in the enforcement
-loop.
+The full direction is in `DIRECTION_ai_build_workflow.md`. The pieces above
+(stubs → extract → gate) are the deterministic core and **already exist**. What's
+still planned:
 
-**Core pipeline (deterministic, no LLM at run time):**
+**Human surfaces in the app:**
 
-1. **Spec → TS stubs + test scaffolds** — generate `interface` / `abstract
-   class` / function signatures from `fm:meta` with the exact accepts/returns
-   and `throw new Error('unimplemented')` bodies. Claude Code fills bodies, never
-   signatures, so interface drift becomes a `tsc` error for free. (Partially
-   present: `spec-to-stubs.mjs`.)
-2. **Extract from TS** — re-serialize real code (nodes, kind, parent, import
-   edges, registry membership, hook bindings) into an `.mmd` that *cannot*
-   drift. (Present: `extract.mjs`; registry/hook-binding extraction is the
-   planned extension.)
-3. **Gate: diff extracted vs spec** — fail a PR on any structural drift. (Present:
-   `gate.mjs`.)
-4. **Search** — paste an `.mmd`, find a class/module/type by navigating the
-   extracted graph.
-5. **In-app diff** — paste two `.mmd` files, see the delta visually (the same
-   diff the gate enforces).
+- **Search** — paste an `.mmd`, find a class/module/type by navigating the
+  extracted graph.
+- **In-app visual diff** — paste two `.mmd` files and see the delta on the
+  canvas (the same diff the gate enforces, made visual).
 
-**LLM at the edges (authoring/planning only):**
+**Extraction depth:**
 
-- **A. Behavioural test bodies from prose** — an LLM turns each node's
-  behavioural `desc` ("never mutates `currentReadOnly`") into a real assertion
-  you review once; CI then enforces it deterministically. Closes the one gap
-  types and structure can't: *behaviour*.
-- **B. Intent → spec delta** — describe a change in English ("add a cache
-  between `store` and `storage`"); the LLM proposes the `fm:meta` diff; you
-  approve; the deterministic pipeline enforces it.
+- Richer extracted edges — registry membership and hook bindings read from the
+  composition root, beyond today's import edges.
+
+**LLM at the edges (authoring/planning only — never in the enforcement loop):**
+
+- **A. Behavioural test bodies from prose** — an LLM turns a node's behavioural
+  `desc` ("never mutates `currentReadOnly`") into a real assertion you review
+  once; CI then enforces it. Closes the one gap types and structure can't:
+  *behaviour*.
+- **B. Intent → spec delta** — describe a change in English ("add a cache between
+  `store` and `storage`"); the LLM proposes the `fm:meta` diff; you approve; the
+  deterministic pipeline enforces it.
 - **C. Advisory PR reviewer** — an LLM checks a PR against prose claims that
-  can't be a type or test (e.g. "siblings, no cross-talk") and **warns**, never
+  can't be a type or a test (e.g. "siblings, no cross-talk") and **warns**, never
   blocks.
 
-**Smaller source-viewer follow-ups:**
+**Source-viewer follow-up:**
 
-- Spec-forward authoring: declare contracts as `@flowmap-node` banners with
-  typed signatures *before* implementation, so the same diagram serves
-  spec-out (to Claude Code) and review-in (the body check) on one surface.
+- Spec-forward authoring — declare contracts as `@flowmap-node` banners with
+  typed signatures *before* implementation, so the same diagram serves spec-out
+  (to the agent) and review-in (the body check) on one surface.
 
 ---
 
