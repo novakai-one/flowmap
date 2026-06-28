@@ -31,7 +31,7 @@ export interface MeasuredCard {
 // @flowmap-node state kind=store
 export interface StateStore {
   nodes: Record<string, DiagramNode>;
-  edges: import('./types').DiagramEdge[];
+  edges: import('../types/types').DiagramEdge[];
   sel: Set<string>;
   selEdge: string | null;
   /** next node-id counter */

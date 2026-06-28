@@ -25,7 +25,7 @@ interface Mode {
   marquee: { x0: number; y0: number; el: HTMLElement; add: boolean; base: Set<string> } | null;
   pan: { sx: number; sy: number; cx: number; cy: number } | null;
   resize: { id: string; corner: string; sx: number; sy: number; ox: number; oy: number; ow: number; oh: number } | null;
-  link: { from: string; side: import('../core/types').PortSide; ghost: SVGPathElement } | null;
+  link: { from: string; side: import('../core/types/types').PortSide; ghost: SVGPathElement } | null;
   labelDrag: { eid: string; ox: number; oy: number; moved: boolean } | null;
   bendDrag: { eid: string; moved: boolean } | null;
 }
@@ -111,7 +111,7 @@ export function initPointer(
     stage.setPointerCapture(e.pointerId);
   }
 
-  function startLink(fromId: string, side: import('../core/types').PortSide, e: PointerEvent): void {
+  function startLink(fromId: string, side: import('../core/types/types').PortSide, e: PointerEvent): void {
     const ghost = document.createElementNS(SVG_NS, 'path');
     ghost.setAttribute('stroke', 'var(--accent-2)');
     ghost.setAttribute('stroke-width', '2');
@@ -207,7 +207,7 @@ export function initPointer(
     if (elab) { startLabelDrag(elab, e); return; }
     if (hit) { selection.selectEdge((hit as unknown as HTMLElement).dataset.eid as string); return; }
     if (rsz) { startResize(rsz, e); return; }
-    if (port) { startLink(port.dataset.port as string, port.dataset.side as import('../core/types').PortSide, e); return; }
+    if (port) { startLink(port.dataset.port as string, port.dataset.side as import('../core/types/types').PortSide, e); return; }
 
     if (node) {
       const id = node.dataset.id as string;

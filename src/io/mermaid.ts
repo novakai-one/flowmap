@@ -56,8 +56,8 @@ export function fromMermaid(text: string): ParseResult {
   const labelPosMap = new Map<string, Point>();
   const roots: string[] = [];
   const groupStack: string[] = [];
-  const fmAcc: Record<string, import('../core/types').Frontmatter> = {};
-  const kindMap = new Map<string, import('../core/types').NodeKind>();
+  const fmAcc: Record<string, import('../core/types/types').Frontmatter> = {};
+  const kindMap = new Map<string, import('../core/types/types').NodeKind>();
   const parentMap = new Map<string, string>();
   let maxN = 0, maxE = 0;
   let dir: FlowDir = 'TD';
@@ -88,7 +88,7 @@ export function fromMermaid(text: string): ParseResult {
     if ((m = t.match(/^%% edge (\w+) bend (-?\d+) (-?\d+)/))) { bendMap.set(m[1], { x: +m[2], y: +m[3] }); return; }
     if ((m = t.match(/^%% edge (\w+) labelpos (-?\d+) (-?\d+)/))) { labelPosMap.set(m[1], { x: +m[2], y: +m[3] }); return; }
     if ((m = t.match(/^%% root (\w+)/))) { roots.push(m[1]); bumpN(m[1]); return; }
-    if ((m = t.match(/^%% kind (\w+) (\w+)/))) { kindMap.set(m[1], m[2] as import('../core/types').NodeKind); bumpN(m[1]); return; }
+    if ((m = t.match(/^%% kind (\w+) (\w+)/))) { kindMap.set(m[1], m[2] as import('../core/types/types').NodeKind); bumpN(m[1]); return; }
     if ((m = t.match(/^%% parent (\w+) (\w+)/))) { parentMap.set(m[1], m[2]); bumpN(m[1]); bumpN(m[2]); return; }
     if ((m = t.match(/^(?:flowchart|graph)\s+(TD|TB|BT|LR|RL)\b/i))) {
       const d = m[1].toUpperCase();
