@@ -36,6 +36,7 @@ A set of independent `.mjs` CLIs that form a deterministic pipeline. It ships as
 | `flowmap-stubs` | `tools/buildspec/spec-to-stubs.mjs` | Generate TS stubs + compile-time contract tests from a spec's `fm:meta` |
 | `flowmap-extract` | `tools/buildspec/extract.mjs` | Walk TS with ts-morph → ground-truth `.mmd` + `bodies.json` |
 | `flowmap-gate` | `tools/buildspec/gate.mjs` | Diff committed spec vs extracted code; exit 1 on drift |
+| `flowmap-scaffold` | `tools/buildspec/scaffold.mjs` | Backfill interface declarations from real TS; bootstrap draft fragments from TS |
 
 ## The three capabilities
 
@@ -311,7 +312,9 @@ This puts six CLIs on your PATH (via `node_modules/.bin`): `flowmap-bundle`, `fl
     "flowmap:bodies":   "flowmap-extract --map docs/flowmap/_bundle.mmd --tsconfig tsconfig.json --out /tmp/extracted.mmd && cp /tmp/extracted.bodies.json ./bodies.json",
     "flowmap:ship":     "npm run flowmap:bundle && flowmap-validate docs/flowmap/_bundle.mmd && flowmap-lint docs/flowmap/_bundle.mmd && npm run flowmap:bodies",
     "flowmap:gate":     "flowmap-extract --map docs/flowmap/_bundle.mmd --tsconfig tsconfig.json --out /tmp/extracted.mmd && flowmap-gate --spec docs/flowmap/_bundle.mmd --code /tmp/extracted.mmd --unplanned-as-warning",
-    "spec:stubs":       "flowmap-stubs docs/flowmap/_bundle.mmd --out src/contracts --clean"
+    "spec:stubs":       "flowmap-stubs docs/flowmap/_bundle.mmd --out src/contracts --clean",
+    "flowmap:backfill": "for f in src/*/*/*.flowmap.mmd; do flowmap-scaffold --backfill \"$f\" --tsconfig tsconfig.json; done",
+    "flowmap:init":     "flowmap-scaffold --init --tsconfig tsconfig.json --src src --out docs/flowmap/bootstrap"
   }
 }
 ```

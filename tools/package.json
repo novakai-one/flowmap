@@ -9,6 +9,7 @@
     "flowmap-extract": "buildspec/extract.mjs",
     "flowmap-gate": "buildspec/gate.mjs",
     "flowmap-stubs": "buildspec/spec-to-stubs.mjs",
+    "flowmap-scaffold": "buildspec/scaffold.mjs",
     "flowmap-lint": "flowmap/flowmap-lint.mjs"
   },
   "files": [
@@ -21,6 +22,7 @@
     "buildspec/mmd-parse.mjs",
     "buildspec/skeleton.mjs",
     "buildspec/diff-core.mjs",
+    "buildspec/scaffold.mjs",
     "SYNTAX_README.md",
     "README.md",
     "BUILD_FLOWMAP.md",

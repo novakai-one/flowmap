@@ -27,6 +27,30 @@ own `containerOf` (src/core/state.ts) and `isSpineEdge` (src/io/layout.ts):
 
 ## The loop
 
+### Step 0 — Bootstrap (optional, for from-scratch adoption)
+
+If you have an existing TS codebase with no `.mmd` files:
+
+1. **`npm run flowmap:init`** — auto-generates draft fragments + root.mmd from your
+   TypeScript source. Every exported symbol becomes a node with `%% src`, `%% kind`,
+   `name=`, and real interface declarations (`i0.accepts`/`i0.returns` with actual
+   types, not placeholders). Prose `desc=` is left empty. Sections and spine edges
+   are NOT generated.
+
+2. **The draft FAILS `flowmap-lint` by design** (it is a file-mirror: one node per
+   export, no sections). You MUST do the architectural work in steps 1–7 below
+   before it will pass.
+
+3. Move the generated fragments from the bootstrap output dir into your source
+   folders (so the bundler finds them with `--dir src`).
+
+4. After authoring your fragments (steps 1–7), run **`npm run flowmap:backfill`**
+   to fill in any interface declarations you didn't write by hand. This is
+   idempotent — it only adds `i0` lines for gated nodes (function/class/hook/type)
+   that lack them.
+
+### The authoring loop
+
 1. **If a flowmap already exists, lint it FIRST.** If it fails, distrust it — do not imitate
    it, rebuild. A failing existing flowmap is the trap that produces another bad one.
 2. **Find the units.** Start at the entry point, follow the call graph, list the units a

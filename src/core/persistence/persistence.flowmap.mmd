@@ -11,12 +11,22 @@ flowchart LR
 %% --- internal functions ---
 %% fm:meta persist name=persist
 %% fm:meta persist desc=debounced write of nodes/edges/counters/dir + camera to LS_KEY.
+%% fm:meta persist i0.name=persist
+%% fm:meta persist i0.returns=void
 %% fm:meta loadPersisted name=loadPersisted
 %% fm:meta loadPersisted desc=restore autosave into state (normalizing each node's fm); false when nothing to restore.
+%% fm:meta loadPersisted i0.name=loadPersisted
+%% fm:meta loadPersisted i0.returns=boolean
 %% fm:meta loadPrefs name=loadPrefs
 %% fm:meta loadPrefs desc=load prefs over defaults, migrating the legacy 260px fmWidth.
+%% fm:meta loadPrefs i0.name=loadPrefs
+%% fm:meta loadPrefs i0.accepts=prefs: Prefs
+%% fm:meta loadPrefs i0.returns=void
 %% fm:meta savePrefs name=savePrefs
 %% fm:meta savePrefs desc=persist prefs to PREF_KEY.
+%% fm:meta savePrefs i0.name=savePrefs
+%% fm:meta savePrefs i0.accepts=prefs: Prefs
+%% fm:meta savePrefs i0.returns=void
 %% --- deps (external; canonical defs live in root.mmd) ---
 %% fm:meta state name=state
 %% fm:meta config name=config

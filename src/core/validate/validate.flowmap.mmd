@@ -18,10 +18,21 @@ flowchart LR
 %% --- internal functions ---
 %% fm:meta edgeIdentities name=edgeIdentities
 %% fm:meta edgeIdentities desc=stable content-derived identity per edge (from-to-style + occurrence index); label excluded so a relabel keeps identity. Foundation for diff/merge.
+%% fm:meta edgeIdentities i0.name=edgeIdentities
+%% fm:meta edgeIdentities i0.accepts=edges: DiagramEdge[]
+%% fm:meta edgeIdentities i0.returns=Map<string, string>
 %% fm:meta validateModel name=validateModel
 %% fm:meta validateModel desc=structural errors that break a clean round-trip or build — self/dangling parent, cycles, orphan edges.
+%% fm:meta validateModel i0.name=validateModel
+%% fm:meta validateModel i0.accepts=nodes: NodeMap
+%% fm:meta validateModel i0.accepts=edges: DiagramEdge[]
+%% fm:meta validateModel i0.returns=Issue[]
 %% fm:meta semanticDiff name=semanticDiff
 %% fm:meta semanticDiff desc=round-trip diff; invariant is per-id node (shape/kind/parent/label/fm) + per-identity edge preserved, NOT literal equality (geometry/counters may change).
+%% fm:meta semanticDiff i0.name=semanticDiff
+%% fm:meta semanticDiff i0.accepts=before: { nodes: NodeMap; edges: DiagramEdge[] }
+%% fm:meta semanticDiff i0.accepts=after: { nodes: NodeMap; edges: DiagramEdge[] }
+%% fm:meta semanticDiff i0.returns=Issue[]
 %% --- deps (external; canonical defs live in root.mmd) ---
 %% fm:meta Issue name=Issue
 %% fm:meta types name=types
