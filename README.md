@@ -74,6 +74,39 @@ flowchart LR
   subgraph grp ["Caption"] … end          # group / section on one level
 ```
 
+## Important. Creating Flowaps. Critical Understanding.
+
+- Flowaps are NOT a copy of the repo directory.
+
+- Step 1 -> Create a root level .mmd and store it in /docs/flowmap
+
+- Step 2 -> Create module level *.flowmap.mmd
+ -> Important! This is not a copy of the repo folder structure.
+ -> a flowmap for core.flowmap.mmd is useless.
+ -> flowmaps describe app intent, functionality and architectural design choices.
+ -> flowmaps are NOT about describing repo folder structures. A flowmap does not care what folder it is located in. 
+ 
+ - Step 3a) -> Add flowmap tags inside module file body text. Example below is extracted from a repo with a block manager ts class module.
+
+// @flowmap-node blockManager kind=class
+export default class BlockManager {
+  // ── Receivers (public surface) ──────────────────────────────────────────
+
+- Step 3b) -> include interface tags within the module to populate the frontmatter cards. Example below.
+
+  // i1 — key. Enter -> create text; Cmd+Shift+D -> create database;
+  // Backspace on empty -> delete.
+  // @flowmap-node blockManager__recvKey kind=function
+  receiveKeyEvent(draft: DocDraft): DocDraft {
+
+--- File edits completed. 
+
+bundle.mjs will now merge the individual mmd files into _bundle.mmd which can be pasted into your flowmap web app.
+bodies-from-map.mjs will now produce bodies.json which provides the json file that can be uploaded to your flowmap web app as source, which populates the right panel function body level detail.
+
+
+## Important. Mandatory Syntax Requirements For Creating Flowmaps.
+
 | Shape | Syntax | Role |
 |---|---|---|
 | rect | `id["L"]` — module / class / file | spine |
@@ -85,7 +118,7 @@ flowchart LR
 | circle | `id(("L"))` — state / event | satellite |
 | note | `id>"L"]` — type / annotation | satellite |
 
-`Kind` (`%% kind <id> <kind>`) is required on every node. Kind ∈ `component | hook | class | store | module | function | type | service | event`. It tags the language construct (shape alone can't distinguish component/hook/class/module — they all collapse to rect). Rendered as a corner badge + automatic fill tint.
+`Kind` (`%% kind <id> <kind>`) is a MANDATORY requirement on every node. Kind ∈ `component | hook | class | store | module | function | type | service | event`. It tags the language construct (shape alone can't distinguish component/hook/class/module — they all collapse to rect). Rendered as a corner badge + automatic fill tint.
 
 ## Accept and return types are mandatory for the gate to work
 
