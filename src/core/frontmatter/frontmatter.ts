@@ -26,7 +26,7 @@
    i<N> prefix) are still parsed and folded into interface 0.
    ===================================================================== */
 
-import type { Frontmatter, NodeInterface, DiagramNode } from './types';
+import type { Frontmatter, NodeInterface, DiagramNode } from '../types/types';
 
 // @flowmap-node frontmatter kind=module
 export function emptyInterface(): NodeInterface {

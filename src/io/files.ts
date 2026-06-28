@@ -9,9 +9,9 @@
    the diagram; bodies.json is optional (and can be large).
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
+import type { AppContext } from '../core/context/context';
 import type { MermaidApi } from './mermaid';
-import type { CameraApi } from '../core/camera';
+import type { CameraApi } from '../core/camera/camera';
 
 export interface FilesApi {
   saveMmd: () => void;

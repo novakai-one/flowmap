@@ -9,10 +9,10 @@
    Pure builder + a couple of blob downloads. Does not mutate the model.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { DiagramNode } from '../core/types';
-import { portPos, bestSides } from '../core/state';
-import { esc, nodeFill } from '../core/config';
+import type { AppContext } from '../core/context/context';
+import type { DiagramNode } from '../core/types/types';
+import { portPos, bestSides } from '../core/state/state';
+import { esc, nodeFill } from '../core/config/config';
 import { orthoPath, midOf } from '../render/wires';
 
 interface ThemeColors {

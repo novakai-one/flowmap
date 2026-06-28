@@ -6,9 +6,9 @@
    duplicateSel. Mutates the model, re-renders, pushes history.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { DiagramNode, DiagramEdge, Point } from '../core/types';
-import { snapV } from '../core/state';
+import type { AppContext } from '../core/context/context';
+import type { DiagramNode, DiagramEdge, Point } from '../core/types/types';
+import { snapV } from '../core/state/state';
 
 export interface Clipboard {
   nodes: DiagramNode[];

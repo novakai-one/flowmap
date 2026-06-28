@@ -10,7 +10,7 @@
    also the foundation the later diff / merge-by-id features reuse.
    ===================================================================== */
 
-import type { DiagramNode, DiagramEdge, Frontmatter } from './types';
+import type { DiagramNode, DiagramEdge, Frontmatter } from '../types/types';
 
 export type IssueLevel = 'error' | 'warn';
 // @flowmap-node Issue kind=type

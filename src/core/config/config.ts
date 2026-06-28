@@ -7,7 +7,7 @@
    pure helpers. No DOM, no mutable state.
    ===================================================================== */
 
-import type { ShapeKind, NodeKind, EdgeStyle, Prefs } from './types';
+import type { ShapeKind, NodeKind, EdgeStyle, Prefs } from '../types/types';
 
 export const SHAPES: ShapeKind[] = [
   'rect', 'round', 'stadium', 'cylinder', 'diamond', 'circle', 'hex', 'note', 'group',

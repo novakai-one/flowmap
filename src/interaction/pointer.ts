@@ -11,11 +11,11 @@
    (linkSrc) so render can highlight the link source.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { CameraApi } from '../core/camera';
+import type { AppContext } from '../core/context/context';
+import type { CameraApi } from '../core/camera/camera';
 import type { SelectionApi } from './selection';
 import type { NodesApi } from './nodes';
-import { portPos, snapV, containerOf } from '../core/state';
+import { portPos, snapV, containerOf } from '../core/state/state';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 

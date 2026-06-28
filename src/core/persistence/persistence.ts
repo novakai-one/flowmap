@@ -7,10 +7,10 @@
    It mutates ctx.state / ctx.cam / ctx.prefs in place on load.
    ===================================================================== */
 
-import type { AppContext } from './context';
-import type { Prefs } from './types';
-import { LS_KEY, PREF_KEY, DEFAULT_PREFS } from './config';
-import { normalizeFrontmatter } from './frontmatter';
+import type { AppContext } from '../context/context';
+import type { Prefs } from '../types/types';
+import { LS_KEY, PREF_KEY, DEFAULT_PREFS } from '../config/config';
+import { normalizeFrontmatter } from '../frontmatter/frontmatter';
 
 export interface PersistenceApi {
   persist: () => void;

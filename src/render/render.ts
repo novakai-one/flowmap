@@ -10,11 +10,11 @@
    Writes: only the DOM under #world. Does not mutate the model.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { DiagramNode, Frontmatter } from '../core/types';
-import { esc, KIND_BADGE, nodeFill } from '../core/config';
-import { childIdsOf } from '../core/state';
-import { isFrontmatterEmpty, parseTypeRef, nodeUsesType } from '../core/frontmatter';
+import type { AppContext } from '../core/context/context';
+import type { DiagramNode, Frontmatter } from '../core/types/types';
+import { esc, KIND_BADGE, nodeFill } from '../core/config/config';
+import { childIdsOf } from '../core/state/state';
+import { isFrontmatterEmpty, parseTypeRef, nodeUsesType } from '../core/frontmatter/frontmatter';
 
 export interface RenderApi {
   render: () => void;

@@ -10,10 +10,10 @@
    breadcrumb, but never pushes history or mutates nodes/edges.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { CameraApi } from '../core/camera';
-import { containerOf, containerPath } from '../core/state';
-import { esc } from '../core/config';
+import type { AppContext } from '../core/context/context';
+import type { CameraApi } from '../core/camera/camera';
+import { containerOf, containerPath } from '../core/state/state';
+import { esc } from '../core/config/config';
 
 export interface ViewApi {
   enter: (id: string) => void;

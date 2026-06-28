@@ -5,7 +5,7 @@
    only when there's no autosave to restore. Pure model write.
    ===================================================================== */
 
-import type { StateStore } from './state';
+import type { StateStore } from '../state/state';
 
 // @flowmap-node seed kind=module
 export function seed(state: StateStore): void {

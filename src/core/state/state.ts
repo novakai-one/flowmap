@@ -10,8 +10,8 @@
    selection module composes these with render()/renderInspector().
    ===================================================================== */
 
-import type { DiagramNode, PortSide, Point, FlowDir } from './types';
-import { SIDE_MULT, GRID } from './config';
+import type { DiagramNode, PortSide, Point, FlowDir } from '../types/types';
+import { SIDE_MULT, GRID } from '../config/config';
 
 /** Gap between a node box and its frontmatter card (CSS .fmcard uses 6). */
 export const CARD_GAP = 6;

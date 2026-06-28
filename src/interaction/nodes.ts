@@ -10,12 +10,12 @@
    place a node at viewport centre), both injected at init.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { ShapeKind } from '../core/types';
+import type { AppContext } from '../core/context/context';
+import type { ShapeKind } from '../core/types/types';
 import type { SelectionApi } from './selection';
-import type { CameraApi } from '../core/camera';
-import { DEFAULTS, PALETTE, SHAPE_KIND } from '../core/config';
-import { snapV, childIdsOf } from '../core/state';
+import type { CameraApi } from '../core/camera/camera';
+import { DEFAULTS, PALETTE, SHAPE_KIND } from '../core/config/config';
+import { snapV, childIdsOf } from '../core/state/state';
 
 export interface NodesApi {
   addNode: (shape: ShapeKind, wx?: number | null, wy?: number | null, opts?: { label?: string }) => string;

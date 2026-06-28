@@ -8,10 +8,10 @@
    Reads: ctx.state. Writes: only #wires and edge-label DOM under #world.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { PortSide, Point, DiagramEdge, DiagramNode } from '../core/types';
-import { portPos, bestSides, containerOf, childIdsOf, nodeFootprint } from '../core/state';
-import { nodeUsesType } from '../core/frontmatter';
+import type { AppContext } from '../core/context/context';
+import type { PortSide, Point, DiagramEdge, DiagramNode } from '../core/types/types';
+import { portPos, bestSides, containerOf, childIdsOf, nodeFootprint } from '../core/state/state';
+import { nodeUsesType } from '../core/frontmatter/frontmatter';
 import { routeFor, obstacleSignature, ensureRoutes } from './avoidRouter';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

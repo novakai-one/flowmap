@@ -21,10 +21,10 @@
    Re-renders, syncs, pushes history, zoom-to-fits.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { CameraApi } from '../core/camera';
-import type { FlowDir, DiagramEdge } from '../core/types';
-import { snapV, nodeFootprint } from '../core/state';
+import type { AppContext } from '../core/context/context';
+import type { CameraApi } from '../core/camera/camera';
+import type { FlowDir, DiagramEdge } from '../core/types/types';
+import { snapV, nodeFootprint } from '../core/state/state';
 import { routeReferences } from '../render/avoidRouter';
 
 export interface LayoutApi {

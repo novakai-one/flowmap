@@ -6,8 +6,8 @@
    click. Delegates each action to the relevant module API.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { CameraApi } from '../core/camera';
+import type { AppContext } from '../core/context/context';
+import type { CameraApi } from '../core/camera/camera';
 import type { SelectionApi } from './selection';
 import type { NodesApi } from './nodes';
 import type { ClipboardApi } from './clipboard';

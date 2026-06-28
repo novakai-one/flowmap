@@ -10,13 +10,13 @@
    metadata comments. Pure transform on one side, model write on the other.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { DiagramNode, DiagramEdge, ShapeKind, FlowDir, Point } from '../core/types';
+import type { AppContext } from '../core/context/context';
+import type { DiagramNode, DiagramEdge, ShapeKind, FlowDir, Point } from '../core/types/types';
 import type { SelectionApi } from '../interaction/selection';
-import { STYLES, DEFAULTS, PALETTE, escM } from '../core/config';
+import { STYLES, DEFAULTS, PALETTE, escM } from '../core/config/config';
 import {
   frontmatterToMermaid, matchFrontmatterLine, applyFrontmatterLine, isFrontmatterEmpty,
-} from '../core/frontmatter';
+} from '../core/frontmatter/frontmatter';
 
 export interface MermaidApi {
   toMermaid: () => string;

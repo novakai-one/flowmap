@@ -7,8 +7,8 @@
    compose the pure model with the render/inspector hooks.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import { childIdsOf } from '../core/state';
+import type { AppContext } from '../core/context/context';
+import { childIdsOf } from '../core/state/state';
 
 export interface SelectionApi {
   selectOnly: (id: string | null) => void;

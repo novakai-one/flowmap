@@ -11,10 +11,10 @@
    pushes history.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { CameraApi } from '../core/camera';
+import type { AppContext } from '../core/context/context';
+import type { CameraApi } from '../core/camera/camera';
 import type { NodesApi } from './nodes';
-import { nodeAtPoint } from '../core/state';
+import { nodeAtPoint } from '../core/state/state';
 
 export interface InlineEditApi {
   beginEdit: (id: string) => void;

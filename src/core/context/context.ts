@@ -18,11 +18,11 @@
    here as hooks but defined in the owning module.
    ===================================================================== */
 
-import type { Camera, Prefs, Point } from './types';
-import type { StateStore } from './state';
-import type { History } from './history';
-import type { Runtime } from './runtime';
-import type { Clipboard } from '../interaction/clipboard';
+import type { Camera, Prefs, Point } from '../types/types';
+import type { StateStore } from '../state/state';
+import type { History } from '../history/history';
+import type { Runtime } from '../runtime/runtime';
+import type { Clipboard } from '../../interaction/clipboard';
 
 /** Resolved DOM references used across modules. */
 export interface DomRefs {

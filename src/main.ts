@@ -16,17 +16,17 @@
    No business logic lives here — only construction + wiring.
    ===================================================================== */
 
-import type { AppContext } from './core/context';
-import { createHooks } from './core/context';
-import { createState } from './core/state';
-import { createHistory, initHistory } from './core/history';
-import { createRuntime } from './core/runtime';
-import { DEFAULT_PREFS } from './core/config';
-import { seed } from './core/seed';
-import { initPersistence, loadPrefs } from './core/persistence';
-import { savePrefs } from './core/persistence';
+import type { AppContext } from './core/context/context';
+import { createHooks } from './core/context/context';
+import { createState } from './core/state/state';
+import { createHistory, initHistory } from './core/history/history';
+import { createRuntime } from './core/runtime/runtime';
+import { DEFAULT_PREFS } from './core/config/config';
+import { seed } from './core/seed/seed';
+import { initPersistence, loadPrefs } from './core/persistence/persistence';
+import { savePrefs } from './core/persistence/persistence';
 
-import { initCamera } from './core/camera';
+import { initCamera } from './core/camera/camera';
 import { initWires } from './render/wires';
 import { routeReferences } from './render/avoidRouter';
 import { initRender } from './render/render';
@@ -51,7 +51,7 @@ import { initLayout } from './io/layout';
 import { initExport } from './io/export';
 import { initFiles } from './io/files';
 
-import type { ShapeKind } from './core/types';
+import type { ShapeKind } from './core/types/types';
 
 /* ---------- 1. resolve DOM ---------- */
 // @flowmap-node main kind=module

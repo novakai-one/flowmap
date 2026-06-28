@@ -10,17 +10,17 @@
    debounce timer and the last-mouse tracker.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { CameraApi } from '../core/camera';
+import type { AppContext } from '../core/context/context';
+import type { CameraApi } from '../core/camera/camera';
 import type { SelectionApi } from './selection';
 import type { NodesApi } from './nodes';
 import type { ClipboardApi } from './clipboard';
 import type { PointerApi } from './pointer';
 import type { InlineEditApi } from './inline-edit';
-import type { HistoryApi } from '../core/history';
+import type { HistoryApi } from '../core/history/history';
 import type { ViewApi } from './view';
-import type { ShapeKind } from '../core/types';
-import { GRID } from '../core/config';
+import type { ShapeKind } from '../core/types/types';
+import { GRID } from '../core/config/config';
 
 export interface KeyboardDeps {
   camera: CameraApi;

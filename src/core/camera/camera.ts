@@ -10,10 +10,10 @@
    plus a debounced persist trigger.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { Point } from '../core/types';
-import { Z_MIN, Z_MAX } from '../core/config';
-import { levelFitBounds } from '../core/state';
+import type { AppContext } from '../context/context';
+import type { Point } from '../types/types';
+import { Z_MIN, Z_MAX } from '../config/config';
+import { levelFitBounds } from '../state/state';
 
 // @flowmap-node CameraApi kind=type
 export interface CameraApi {

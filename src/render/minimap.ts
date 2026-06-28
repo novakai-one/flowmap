@@ -9,9 +9,9 @@
    persistSoon when navigating.
    ===================================================================== */
 
-import type { AppContext } from '../core/context';
-import type { CameraApi } from '../core/camera';
-import { levelBounds, childIdsOf } from '../core/state';
+import type { AppContext } from '../core/context/context';
+import type { CameraApi } from '../core/camera/camera';
+import { levelBounds, childIdsOf } from '../core/state/state';
 
 export interface MinimapApi {
   drawMinimap: () => void;

@@ -38,9 +38,9 @@
 
 import { init, routeEdges } from '@mr_mint/elkjs-libavoid';
 import type { ElkGraph, ElkNode, ElkEdge, LibavoidRouterOptions } from '@mr_mint/elkjs-libavoid';
-import type { AppContext } from '../core/context';
-import type { Point, DiagramNode } from '../core/types';
-import { nodeFootprint } from '../core/state';
+import type { AppContext } from '../core/context/context';
+import type { Point, DiagramNode } from '../core/types/types';
+import { nodeFootprint } from '../core/state/state';
 import type { RouteReq, RouteRes } from './avoidWorker';
 import wasmUrl from './libavoid.wasm?url';
 

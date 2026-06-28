@@ -9,7 +9,7 @@
    pushHistory() also fires persist() so autosave tracks undo points.
    ===================================================================== */
 
-import type { AppContext } from './context';
+import type { AppContext } from '../context/context';
 
 export interface History {
   stack: string[];
