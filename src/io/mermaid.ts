@@ -19,7 +19,7 @@ import {
 } from '../core/frontmatter/frontmatter';
 
 export interface MermaidApi {
-  toMermaid: () => string;
+  toMermaid: (opts?: { only?: Set<string> }) => string;
   sync: () => void;
   applyText: () => void;
 }
@@ -147,48 +147,58 @@ export function initMermaid(ctx: AppContext, selection: SelectionApi): MermaidAp
   const { state } = ctx;
   const { mmd } = ctx.dom;
 
-  function toMermaid(): string {
+  function toMermaid(opts: { only?: Set<string> } = {}): string {
+    const keep = opts.only;
+    const inc = (id: string): boolean => !keep || keep.has(id);
     let out = `flowchart ${state.dir}\n`;
     // layout metadata first
     for (const id in state.nodes) {
+      if (!inc(id)) continue;
       const n = state.nodes[id];
       out += `%% fm ${id} ${Math.round(n.x)} ${Math.round(n.y)} ${Math.round(n.w)} ${Math.round(n.h)} ${n.shape} ${n.color}\n`;
     }
     // frontmatter metadata (public interface) — always emitted when present;
     // the on/off toggle is visibility-only, the data is never stripped here
     for (const id in state.nodes) {
+      if (!inc(id)) continue;
       out += frontmatterToMermaid(id, state.nodes[id].fm);
     }
     // semantic kind (React/TS construct) per node, when set
     for (const id in state.nodes) {
+      if (!inc(id)) continue;
       const k = state.nodes[id].kind;
       if (k) out += `%% kind ${id} ${k}\n`;
     }
     // containment: a node living inside a non-group container node (drill-in
     // internals). Group membership is emitted as a subgraph below instead.
     for (const id in state.nodes) {
+      if (!inc(id)) continue;
       const p = state.nodes[id].parent;
-      if (p && state.nodes[p] && state.nodes[p].shape !== 'group') out += `%% parent ${id} ${p}\n`;
+      if (p && state.nodes[p] && state.nodes[p].shape !== 'group' && inc(p)) out += `%% parent ${id} ${p}\n`;
     }
     for (const e of state.edges) {
+      if (!inc(e.from) || !inc(e.to)) continue;
       if (e.routing === 'ortho') out += `%% edge ${e.id} ortho\n`;
       if (e.bend) out += `%% edge ${e.id} bend ${Math.round(e.bend.x)} ${Math.round(e.bend.y)}\n`;
       if (e.labelPos) out += `%% edge ${e.id} labelpos ${Math.round(e.labelPos.x)} ${Math.round(e.labelPos.y)}\n`;
     }
     // layout roots (Tidy entry nodes) — only those still present
     for (const id of state.roots) {
-      if (state.nodes[id]) out += `%% root ${id}\n`;
+      if (state.nodes[id] && inc(id)) out += `%% root ${id}\n`;
     }
     // group membership: structural parent first, geometry as fallback
     const inGroup: Record<string, string> = {};
     for (const id in state.nodes) {
+      if (!inc(id)) continue;
       const p = state.nodes[id].parent;
-      if (p && state.nodes[p]?.shape === 'group') inGroup[id] = p;
+      if (p && state.nodes[p]?.shape === 'group' && inc(p)) inGroup[id] = p;
     }
     for (const id in state.nodes) {
+      if (!inc(id)) continue;
       if (state.nodes[id].shape !== 'group') continue;
       const g = state.nodes[id];
       for (const oid in state.nodes) {
+        if (!inc(oid)) continue;
         if (oid === id || inGroup[oid] || state.nodes[oid].shape === 'group') continue;
         const o = state.nodes[oid];
         if (o.x >= g.x && o.y >= g.y && o.x + o.w <= g.x + g.w && o.y + o.h <= g.y + g.h) inGroup[oid] = id;
@@ -196,6 +206,7 @@ export function initMermaid(ctx: AppContext, selection: SelectionApi): MermaidAp
     }
     // emit groups with children, then loose nodes
     for (const id in state.nodes) {
+      if (!inc(id)) continue;
       const n = state.nodes[id];
       if (n.shape !== 'group') continue;
       out += `  subgraph ${id} ["${escM(n.label)}"]\n`;
@@ -205,12 +216,14 @@ export function initMermaid(ctx: AppContext, selection: SelectionApi): MermaidAp
       out += '  end\n';
     }
     for (const id in state.nodes) {
+      if (!inc(id)) continue;
       const n = state.nodes[id];
       if (n.shape === 'group' || inGroup[id]) continue;
       out += '  ' + shapeWrap[n.shape](id, escM(n.label)) + '\n';
     }
     // edges
     for (const e of state.edges) {
+      if (!inc(e.from) || !inc(e.to)) continue;
       const arrow = STYLES[e.style] || '-->';
       let conn = arrow;
       if (e.label) {

@@ -25,13 +25,13 @@ export function initSelection(ctx: AppContext): SelectionApi {
     state.sel.clear();
     if (id) state.sel.add(id);
     state.selEdge = null;
-    ctx.hooks.render(); ctx.hooks.renderInspector();
+    ctx.hooks.render(); ctx.hooks.renderInspector(); ctx.hooks.renderSlice();
   }
 
   function toggleSel(id: string): void {
     if (state.sel.has(id)) state.sel.delete(id); else state.sel.add(id);
     state.selEdge = null;
-    ctx.hooks.render(); ctx.hooks.renderInspector();
+    ctx.hooks.render(); ctx.hooks.renderInspector(); ctx.hooks.renderSlice();
   }
 
   function selectEdge(eid: string): void {
@@ -42,13 +42,13 @@ export function initSelection(ctx: AppContext): SelectionApi {
 
   function clearSel(): void {
     state.sel.clear(); state.selEdge = null;
-    ctx.hooks.render(); ctx.hooks.renderInspector();
+    ctx.hooks.render(); ctx.hooks.renderInspector(); ctx.hooks.renderSlice();
   }
 
   function selectAll(): void {
     state.sel = new Set(childIdsOf(state, ctx.view.container));
     state.selEdge = null;
-    ctx.hooks.render(); ctx.hooks.renderInspector();
+    ctx.hooks.render(); ctx.hooks.renderInspector(); ctx.hooks.renderSlice();
   }
 
   return { selectOnly, toggleSel, selectEdge, clearSel, selectAll };

@@ -48,9 +48,11 @@ export interface Hooks {
   pushHistory: () => void;
   updateUndoButtons: () => void;
   toast: (msg: string) => void;
-  showTab: (which: 'insp' | 'style' | 'mmd' | 'source' | 'nav') => void;
+  showTab: (which: 'insp' | 'style' | 'mmd' | 'source' | 'nav' | 'slice') => void;
   /** refresh the navigator pane list */
   renderNavigator: () => void;
+  /** refresh the slice pane (neighbourhood mmd) */
+  renderSlice: () => void;
   /** recompute obstacle-avoiding wire routes, then re-render */
   reroute: () => void;
   /** re-route ONLY these edge ids (incremental), then re-render */
@@ -106,6 +108,7 @@ export function createHooks(): Hooks {
     toast: () => notWired('toast'),
     showTab: () => notWired('showTab'),
     renderNavigator: () => notWired('renderNavigator'),
+    renderSlice: () => notWired('renderSlice'),
     reroute: () => notWired('reroute'),
     rerouteEdges: () => notWired('rerouteEdges'),
     redrawWires: () => notWired('redrawWires'),

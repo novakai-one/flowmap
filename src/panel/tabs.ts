@@ -9,7 +9,7 @@
 import type { AppContext } from '../core/context/context';
 
 export interface TabsApi {
-  showTab: (which: 'insp' | 'style' | 'mmd' | 'source' | 'nav') => void;
+  showTab: (which: 'insp' | 'style' | 'mmd' | 'source' | 'nav' | 'slice') => void;
   togglePanel: () => void;
   toast: (msg: string) => void;
 }
@@ -18,24 +18,27 @@ export function initTabs(ctx: AppContext): TabsApi {
   const { main } = ctx.dom;
   const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 
-  function showTab(which: 'insp' | 'style' | 'mmd' | 'source' | 'nav'): void {
+  function showTab(which: 'insp' | 'style' | 'mmd' | 'source' | 'nav' | 'slice'): void {
     const m = which === 'mmd', s = which === 'style', i = which === 'insp',
-      src = which === 'source', nav = which === 'nav';
+      src = which === 'source', nav = which === 'nav', sl = which === 'slice';
     $('tabMmd').classList.toggle('active', m);
     $('tabStyle').classList.toggle('active', s);
     $('tabInsp').classList.toggle('active', i);
     $('tabSource').classList.toggle('active', src);
     $('tabNav').classList.toggle('active', nav);
+    $('tabSlice').classList.toggle('active', sl);
     $('paneMmd').style.display = m ? 'block' : 'none';
     $('paneStyle').style.display = s ? 'flex' : 'none';
     $('paneInsp').style.display = i ? 'flex' : 'none';
     $('paneSource').style.display = src ? 'flex' : 'none';
     $('paneNav').style.display = nav ? 'flex' : 'none';
+    $('paneSlice').style.display = sl ? 'flex' : 'none';
     $('footMmd').style.display = m ? 'flex' : 'none';
     $('footInsp').style.display = (i || src) ? 'flex' : 'none';
     if (m) ctx.hooks.sync();
     if (src) ctx.hooks.renderInspector();
     if (nav) ctx.hooks.renderNavigator();
+    if (sl) ctx.hooks.renderSlice();
   }
 
   let panelOpen = true;
@@ -59,6 +62,7 @@ export function initTabs(ctx: AppContext): TabsApi {
   $('tabInsp').onclick = () => showTab('insp');
   $('tabSource').onclick = () => showTab('source');
   $('tabNav').onclick = () => showTab('nav');
+  $('tabSlice').onclick = () => showTab('slice');
   $('panelBtn').onclick = togglePanel;
 
   // panel resize: drag the left-edge handle to set --panel-w (clamped).

@@ -15,7 +15,7 @@ import type { AppContext } from '../core/context/context';
 import type { CameraApi } from '../core/camera/camera';
 import type { SelectionApi } from './selection';
 import type { NodesApi } from './nodes';
-import { portPos, snapV, containerOf } from '../core/state/state';
+import { portPos, snapV, containerOf, sliceIds } from '../core/state/state';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -52,53 +52,6 @@ export function initPointer(
   // de-dupes the 2nd click of a double-click so a type trace toggles once
   let lastTrace = { type: '', t: 0 };
   const linkBtn = document.getElementById('linkBtn') as HTMLElement;
-
-  // edges with at least one endpoint in the moved-node set (for scoped reroute)
-  const incidentEdgeIds = (nodeIds: Set<string>): Set<string> => {
-    const ids = new Set<string>();
-    for (const e of state.edges) {
-      if (nodeIds.has(e.from) || nodeIds.has(e.to)) ids.add(e.id);
-    }
-    return ids;
-  };
-
-  const guides: HTMLElement[] = [];
-  const clearGuides = (): void => { guides.forEach((g) => g.remove()); guides.length = 0; };
-
-  /**
-   * Compute the focus spine for a node: solid-edge ancestors + descendants
-   * (transitive) plus 1-hop dotted neighbours. Operates on ctx.state.edges
-   * directly — NOT tools/slice-core (different data shape; app/tooling split).
-   */
-  function computeFocusSpine(id: string): Set<string> {
-    const keep = new Set<string>([id]);
-    // down: solid edges from→to (transitive)
-    const qDown = [id];
-    while (qDown.length) {
-      const cur = qDown.shift()!;
-      for (const e of state.edges) {
-        if (e.style !== 'solid') continue;
-        if (e.from === cur && !keep.has(e.to)) { keep.add(e.to); qDown.push(e.to); }
-      }
-    }
-    // up: solid edges to→from (transitive)
-    const qUp = [id];
-    const seenUp = new Set<string>([id]);
-    while (qUp.length) {
-      const cur = qUp.shift()!;
-      for (const e of state.edges) {
-        if (e.style !== 'solid') continue;
-        if (e.to === cur && !seenUp.has(e.from)) { seenUp.add(e.from); keep.add(e.from); qUp.push(e.from); }
-      }
-    }
-    // refs: 1-hop dotted neighbours
-    for (const e of state.edges) {
-      if (e.style !== 'dotted') continue;
-      if (e.from === id) keep.add(e.to);
-      if (e.to === id) keep.add(e.from);
-    }
-    return keep;
-  }
 
   /* ---------------- starters ---------------- */
   function startDrag(e: PointerEvent): void {
@@ -275,7 +228,7 @@ export function initPointer(
       // alt-click: toggle focus mode on the clicked node's call spine
       if (e.altKey) {
         e.preventDefault();
-        runtime.focusSpine = runtime.focusSpine ? null : computeFocusSpine(id);
+        runtime.focusSpine = runtime.focusSpine ? null : sliceIds(state, id);
         ctx.hooks.render();
         return;
       }

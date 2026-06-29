@@ -45,6 +45,7 @@ import { initTheming } from './panel/theming';
 import { initStyleControls } from './panel/style-controls';
 import { initInspector } from './panel/inspector';
 import { initNavigator } from './panel/navigator';
+import { initSlice } from './panel/slice';
 import { initTabs } from './panel/tabs';
 
 import { initMermaid } from './io/mermaid';
@@ -109,6 +110,7 @@ const inlineEdit = initInlineEdit(ctx, camera, nodes);
 const pointer = initPointer(ctx, camera, selection, nodes);
 const view = initView(ctx, camera);
 const navigatorMod = initNavigator(ctx, { selection, view, camera });
+const sliceMod = initSlice(ctx, { mermaid });
 const contextMenu = initContextMenu(ctx, { camera, selection, nodes, clipboard, inlineEdit, view });
 
 initKeyboard(ctx, {
@@ -134,6 +136,7 @@ ctx.hooks.reroute = () => { void routeReferences(ctx).then(() => render.render()
 ctx.hooks.rerouteEdges = (ids) => { void routeReferences(ctx, { onlyEdgeIds: ids }).then(() => render.render()); };
 ctx.hooks.enterContainer = view.enter;
 ctx.hooks.renderNavigator = navigatorMod.render;
+ctx.hooks.renderSlice = sliceMod.render;
 
 /* ---------- 5. bind remaining top-level DOM ---------- */
 // shape toolbar

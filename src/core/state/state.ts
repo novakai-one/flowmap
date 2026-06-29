@@ -235,3 +235,55 @@ export function worldBounds(state: StateStore):
   }
   return { minX, minY, maxX, maxY };
 }
+
+/* ---------- slice (neighbourhood extraction) ---------- */
+
+/**
+ * Compute the slice neighbourhood for a node: solid-edge ancestors + descendants
+ * (transitive) plus 1-hop dotted neighbours. Pure — no DOM, no side effects.
+ * Same algorithm as the former computeFocusSpine in pointer.ts (focus mode
+ * calls this directly).
+ */
+export function sliceIds(state: StateStore, id: string): Set<string> {
+  const keep = new Set<string>([id]);
+  // down: solid edges from→to (transitive)
+  const qDown = [id];
+  while (qDown.length) {
+    const cur = qDown.shift()!;
+    for (const e of state.edges) {
+      if (e.style !== 'solid') continue;
+      if (e.from === cur && !keep.has(e.to)) { keep.add(e.to); qDown.push(e.to); }
+    }
+  }
+  // up: solid edges to→from (transitive)
+  const qUp = [id];
+  const seenUp = new Set<string>([id]);
+  while (qUp.length) {
+    const cur = qUp.shift()!;
+    for (const e of state.edges) {
+      if (e.style !== 'solid') continue;
+      if (e.to === cur && !seenUp.has(e.from)) { seenUp.add(e.from); keep.add(e.from); qUp.push(e.from); }
+    }
+  }
+  // refs: 1-hop dotted neighbours
+  for (const e of state.edges) {
+    if (e.style !== 'dotted') continue;
+    if (e.from === id) keep.add(e.to);
+    if (e.to === id) keep.add(e.from);
+  }
+  return keep;
+}
+
+/**
+ * Compute boundary stubs: 1-hop neighbours of the keep set that aren't in it.
+ * These give external connection context so a slice replacement can preserve
+ * the seams (what the slice connects to on the outside).
+ */
+export function sliceStubs(state: StateStore, keep: Set<string>): Set<string> {
+  const stubs = new Set<string>();
+  for (const e of state.edges) {
+    if (keep.has(e.from) && !keep.has(e.to) && state.nodes[e.to]) stubs.add(e.to);
+    if (keep.has(e.to) && !keep.has(e.from) && state.nodes[e.from]) stubs.add(e.from);
+  }
+  return stubs;
+}
