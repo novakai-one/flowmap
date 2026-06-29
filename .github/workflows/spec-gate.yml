@@ -32,6 +32,7 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run spec:test
+      - run: npm run spec:conformance
 
   # Drift gate for THIS repo's own map. Regenerates the bundle from the
   # per-folder fragments and fails if:
@@ -62,8 +63,11 @@ jobs:
       - name: Map is structurally sound (not a flat file-mirror)
         run: npm run flowmap:lint
 
-      - name: Every source module is represented (completeness)
+      - name: Every source file is represented (file completeness)
         run: npm run flowmap:coverage
+
+      - name: Every exported symbol is represented (symbol completeness)
+        run: npm run flowmap:exports
 
       - name: Documented signatures match the code (no drift)
         run: npm run flowmap:gate

@@ -1,3 +1,157 @@
+## What flowmap is workign towards:
+I must be able to start new claude instance with 0 context -> have claude use the flowmap features that either exist today or need to exist (e.g. read _bundle.mmd) -> claude needs to now have verifiable and testable understanding, not a prose subjective yes/no -> the handover is trusted, understanding verified at enough to have meaningful design discussion on app -> then it deviates with two scenarios here, similar, but  slightly differenet -> scenario 1(I ask claude to continue where last claude left off - currently only posssible in prose, high risk break point), scenario 2 (I ask claude in human language to build a feature, fix a bug etc.) -> Then claude needs to be able to build the plan, provide the flowmap files -> I can then paste these into the flowmap app to see visually the diff vs today and all the changes, blast radius etc. (I believe this is the part where a lot is already reasonably solid) -> Then this gets approved, with the approval creating an export that can be handed back to claude to implenment with tests that are verifiable, and it needs to ensure that now the flwomap data in the app is up to date and maintained.  ... this is the type of workflow that flowmap is built for - end to end codebase understanding, design, planning and implenentation, error free.
+
+## the above is human language given to claude. Below this is Claudes response and understanding:
+
+! Important ! -> the state below cannot be trusted. You should assume state as stale unless you have verified yourself.
+
+# Flowmap Feature Set
+
+## The Spine
+
+The flowmap loop as described by claude loop: **understand → (continue | design) → plan → review → approve → implement → re-sync**
+
+Every handoff is a verifiable artifact, never prose.
+
+### Two Keystones
+
+- **Keystone 1 — testable understanding** (makes the handover trusted)
+- **Keystone 2 — behavioral acceptance tests in the contract** (makes implementation error-free, not just correctly-shaped)
+
+---
+
+## Phase A — Make the map a trustworthy substrate
+
+> Until green means true AND complete, no downstream step can be trusted.
+
+### A1 — Symbol-level completeness gate
+
+Every exported symbol must be a node or an explicit, listed curation exclusion. Closes the exact hole that caused this session's drift.
+
+**State:** ❌ Missing _(detector exists)_
+
+### A2 — Code↔map freshness in CI
+
+CI regenerates the node set + signatures from code and fails on divergence, not just `bundle≡fragments`. Makes `main` un-stale-able.
+
+**State:** ❌ Missing _(CI only checks `bundle≡fragments`)_
+
+### A3 — Two-parser conformance test
+
+Prove the app parser (`io/mermaid`) and pipeline parser (`mmd-parse.mjs`) produce identical models, or the review shows one thing while enforcement does another.
+
+**State:** ❌ Missing _(untested)_
+
+### A4 — Verification-tier metadata
+
+Every node/edge/desc tagged `verified / advisory / unverified`, with a report that emits "PROVEN vs NARRATED." Lets a fresh Claude calibrate trust instead of swallowing prose-equal-to-signature.
+
+**State:** ❌ Missing
+
+**Outcome:** `flowmap:verify` green ⟺ the map is true + complete as of HEAD, and which claims are load-bearing is explicit.
+
+---
+
+## Phase B — Verifiable onboarding
+
+> 0-context Claude → trusted, verified understanding
+
+### B1 — Single onboarding command (`flowmap:onboard`)
+
+Verifies the map is green, prints the minimal durable invariants (the only trusted prose), points at `_bundle.mmd` + `bodies.json`, runs B2. One door in, verifiable result.
+
+**State:** ❌ Missing
+
+### B2 — Keystone 1: Comprehension self-test
+
+A deterministic question set generated from the verified map:
+
+> _"arity of `applyPlan`? which module implements `hooks.render`? blast radius of state?"_
+
+A fresh Claude answers from the map alone, scored against the map's facts. Passing = understanding demonstrated, not asserted. Wrong answer exposes either a polluted read or an incomplete map.
+
+**State:** ❌ Missing
+
+**Outcome:** "Do you understand the app?" stops being a subjective yes/no and becomes a passing test.
+
+---
+
+## Phase C — Continuity + planning
+
+### C1 — Verified work-state (`flowmap:status <plan>`)
+
+_Scenario 1._ "Where we left off" is structured data keyed to real nodes, but its status is derived, not stored: re-run the gate per change → the system computes `built / approved-but-unbuilt / drifted`. Kills the high-risk prose break point.
+
+**State:** ⚠️ Partial _(pieces — `applyPlan`, `gate` — exist)_
+
+### C2 — Plan authoring + one-command dry-run cert
+
+_Scenario 2._ English → `plan.json` (with proposed fm) + proposed `.mmd`, then a single command runs `apply → stubs → tsc → gate` and certifies the plan round-trips before the human ever opens it.
+
+**State:** ⚠️ Partial _(pieces exist; no integrated "certify a plan" command)_
+
+### C3 — Authoring-time coherence
+
+Plan references only real ids (checked vs fresh map), dependency graph acyclic, accepted set coherent.
+
+**State:** ⚠️ Partial _(`coherenceWarnings` exists for review, not authoring)_
+
+---
+
+## Phase D — Visual review
+
+> Paste into app → diff, blast radius, approve — _"reasonably solid"_
+
+### D1 — Layout fidelity
+
+Render the overlay on the human's real `ctx.state` positions, not the force-sim ball. The canvas is the human layer; this is the one substantive gap here.
+
+**State:** ❌ Missing _(still force-sim)_
+
+### D2 — Unified review surface
+
+`diffWorkspace` and `planner` overlap; collapse to one path: `paste → diff + blast radius + bodies + before/after sigs → accept/reject → export`.
+
+**State:** ⚠️ Partial _(two overlapping UIs)_
+
+---
+
+## Phase E — Approval → implementation → re-sync
+
+### E1 — Single approval export
+
+One artifact: approved `.mmd` + generated stubs/contracts + the gate flipped to `"unbuilt"` = the build checklist.
+
+**State:** ⚠️ Partial _(`serializeSpec`, `spec:stubs` exist as pieces)_
+
+### E2 — Keystone 2: Behavioral acceptance tests in the contract
+
+The approved change carries acceptance criteria that generate failing tests; "done" = signature-gate green AND those tests green. This is what makes implementation verifiably correct, not just correctly-shaped.
+
+**State:** ❌ Missing _(the behavioral frontier)_
+
+### E3 — Writeback
+
+Approved/implemented code updates the fragments automatically (extend `scaffold --backfill/--init` to add new nodes), so the loop closes without the manual fragment edit that caused this session's drift.
+
+**State:** ⚠️ Partial _(`scaffold` exists; writeback manual)_
+
+### E4 — CI enforces the whole loop
+
+A merge can't land unless map is fresh+complete (A1/A2), the approved plan's changes are all gate-green (C1), and acceptance tests pass (E2). "Error-free" becomes a CI property.
+
+**State:** ❌ Missing
+
+---
+
+## Summary
+
+### Already solid — keep
+
+The diff engine + 4 views, the planner overlay, transitive `downstreamCone`, real bodies, coherence checks, `applyPlan` / `serializeSpec`, `spec:stubs`, the signature gate, the fragment→bundle pipeline.
+
+--- below this could be stale ---
+
 # flowmap — orientation for a new contributor (human or AI)
 
 Read this first. It exists so you can work in this repo **without reading every file**.
@@ -74,6 +228,10 @@ Autosave = `persistence.ts` → `localStorage`.
 - `%% ...` comment directives (including `%% src`) belong to the tooling, not the app.
 
 ## Navigating without reading every line
+- **New agent / 0-context handover**: run `npm run flowmap:onboard` FIRST. It proves the map is
+  true+complete as of HEAD, states these invariants, and hands you a comprehension quiz
+  (`npm run flowmap:quiz`) that makes your understanding pass/fail instead of prose. Verified work
+  state of an in-flight plan: `npm run flowmap:status -- --plan <plan.json>`. (See `docs/flowmap/SESSION_HANDOFF.md`.)
 - **Whole architecture + interfaces + source**: open `docs/flowmap/_bundle.mmd` in the app,
   or read `docs/flowmap/root.mmd` — every module carries a one-line `desc` and its interface as
   frontmatter, and the 13 heaviest units are drilled to function level. `public/bodies.json`
@@ -95,3 +253,5 @@ Autosave = `persistence.ts` → `localStorage`.
 - Batch your reads: read all relevant files in one turn before responding.
 - After writing, VERIFY: run the commands you documented, cat the files you  cited. Correct discrepancies before showing the result.
 - If you're about to describe a script's behavior, cat package.json and quote it.`
+
+

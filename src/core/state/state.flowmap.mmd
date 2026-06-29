@@ -155,9 +155,28 @@ flowchart LR
 %% fm:meta worldBounds i0.accepts=state: StateStore
 %% fm:meta worldBounds i0.returns={ minX: number; minY: number; maxX: number; maxY: number } | null
 
+%% src sliceIds src/core/state/state.ts#sliceIds
+%% kind sliceIds function
+%% fm:meta sliceIds name=sliceIds
+%% fm:meta sliceIds desc=neighbourhood id set of a node: transitive solid up/down plus 1-hop dotted refs (the slice panel's keep set)
+%% fm:meta sliceIds i0.name=sliceIds
+%% fm:meta sliceIds i0.accepts=state: StateStore
+%% fm:meta sliceIds i0.accepts=id: string
+%% fm:meta sliceIds i0.returns=Set<string>
+
+%% src sliceStubs src/core/state/state.ts#sliceStubs
+%% kind sliceStubs function
+%% fm:meta sliceStubs name=sliceStubs
+%% fm:meta sliceStubs desc=boundary stubs of a keep set: 1-hop neighbours that fall outside it, drawn as edge endpoints in a slice
+%% fm:meta sliceStubs i0.name=sliceStubs
+%% fm:meta sliceStubs i0.accepts=state: StateStore
+%% fm:meta sliceStubs i0.accepts=keep: Set<string>
+%% fm:meta sliceStubs i0.returns=Set<string>
+
 %% parent st_model state
 %% parent st_geom state
 %% parent st_levels state
+%% parent st_slice state
 
   subgraph st_model ["Model + factory"]
     StateStore>"StateStore"]
@@ -183,6 +202,10 @@ flowchart LR
     isAncestor("isAncestor")
     worldBounds("worldBounds")
   end
+  subgraph st_slice ["Neighbourhood slice"]
+    sliceIds("sliceIds")
+    sliceStubs("sliceStubs")
+  end
 
   bestSides --> nodeCenter
   nodeAtPoint --> containerOf
@@ -191,6 +214,8 @@ flowchart LR
   levelBounds --> childIdsOf
   levelHeaderRect --> levelBounds
   levelFitBounds --> levelBounds
+  sliceStubs --> sliceIds
   createState -.->|returns| StateStore
   nodeFootprint -.->|returns| Footprint
   nodeFootprint -.->|reads measured| StateStore
+  sliceIds -.->|reads| StateStore

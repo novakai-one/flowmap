@@ -24,7 +24,7 @@ flowchart LR
 %% src PlanChange src/core/plan/plan.ts#PlanChange
 %% kind PlanChange type
 %% fm:meta PlanChange name=PlanChange
-%% fm:meta PlanChange desc=one proposed change: status, target, phase, risk, intent, dependsOn, optional new node/edge
+%% fm:meta PlanChange desc=one proposed change: status, target, phase, risk, intent, dependsOn, optional new node/edge, and proposed fm (the enforceable signature)
 
 %% src PlanPhase src/core/plan/plan.ts#PlanPhase
 %% kind PlanPhase type
@@ -98,9 +98,55 @@ flowchart LR
 %% fm:meta synthNode i0.accepts=c: PlanChange
 %% fm:meta synthNode i0.returns=DiagramNode | null
 
+%% src ChangeStatus src/core/plan/plan.ts#ChangeStatus
+%% kind ChangeStatus type
+%% fm:meta ChangeStatus name=ChangeStatus
+%% fm:meta ChangeStatus desc=a change's disposition against current code: add, modify, remove
+
+%% src Verdict src/core/plan/plan.ts#Verdict
+%% kind Verdict type
+%% fm:meta Verdict name=Verdict
+%% fm:meta Verdict desc=a reviewer's per-change decision: accept or reject
+
+%% src RiskLevel src/core/plan/plan.ts#RiskLevel
+%% kind RiskLevel type
+%% fm:meta RiskLevel name=RiskLevel
+%% fm:meta RiskLevel desc=risk band carried on a change: low, med, high
+
+%% src ConeNode src/core/plan/plan.ts#ConeNode
+%% kind ConeNode type
+%% fm:meta ConeNode name=ConeNode
+%% fm:meta ConeNode desc=one affected node in a downstream cone: id plus hop distance from the change
+
+%% src DownstreamCone src/core/plan/plan.ts#DownstreamCone
+%% kind DownstreamCone type
+%% fm:meta DownstreamCone name=DownstreamCone
+%% fm:meta DownstreamCone desc=transitive impact result: affected cone nodes nearest-first, reached entry points, max depth
+
+%% src downstreamCone src/core/plan/plan.ts#downstreamCone
+%% kind downstreamCone function
+%% fm:meta downstreamCone name=downstreamCone
+%% fm:meta downstreamCone desc=transitive downstream cone of a node change: every node that consumes ref, BFS backward over the edge list
+%% fm:meta downstreamCone i0.name=downstreamCone
+%% fm:meta downstreamCone i0.accepts=edges: DiagramEdge[]
+%% fm:meta downstreamCone i0.accepts=ref: string
+%% fm:meta downstreamCone i0.accepts=opts: { roots?: string[]; maxDepth?: number }
+%% fm:meta downstreamCone i0.returns=DownstreamCone
+
+%% src applyPlan src/core/plan/plan.ts#applyPlan
+%% kind applyPlan function
+%% fm:meta applyPlan name=applyPlan
+%% fm:meta applyPlan desc=apply a plan's accepted changes to a base model, producing the proposed model that serialises to the approved spec (Phase 1c bridge)
+%% fm:meta applyPlan i0.name=applyPlan
+%% fm:meta applyPlan i0.accepts=base: { nodes: Record<string, DiagramNode>; edges: DiagramEdge[] }
+%% fm:meta applyPlan i0.accepts=plan: Plan
+%% fm:meta applyPlan i0.accepts=accepted: (changeId: string) => boolean
+%% fm:meta applyPlan i0.returns={ nodes: Record<string, DiagramNode>; edges: DiagramEdge[] }
+
 %% parent p_shapes plan
 %% parent p_index plan
 %% parent p_analysis plan
+%% parent p_apply plan
 
   subgraph p_shapes ["Plan shapes"]
     ChangeTarget>"ChangeTarget"]
@@ -111,6 +157,11 @@ flowchart LR
     PlanPhase>"PlanPhase"]
     Plan>"Plan"]
     CoherenceWarning>"CoherenceWarning"]
+    ChangeStatus>"ChangeStatus"]
+    Verdict>"Verdict"]
+    RiskLevel>"RiskLevel"]
+    ConeNode>"ConeNode"]
+    DownstreamCone>"DownstreamCone"]
   end
   subgraph p_index ["Lifecycle + index"]
     emptyPlan("emptyPlan")
@@ -120,16 +171,28 @@ flowchart LR
   end
   subgraph p_analysis ["Review analysis"]
     blastRadius("blastRadius")
+    downstreamCone("downstreamCone")
     coherenceWarnings("coherenceWarnings")
     synthNode("synthNode")
+  end
+  subgraph p_apply ["Apply → proposed spec"]
+    applyPlan("applyPlan")
   end
 
   normalizePlan --> emptyPlan
   coherenceWarnings --> indexById
+  applyPlan --> synthNode
   normalizePlan -.->|returns| Plan
   indexByRef -.->|values| PlanChange
   synthNode -.->|reads| PlanChange
   coherenceWarnings -.->|returns| CoherenceWarning
+  coherenceWarnings -.->|reads| Verdict
+  downstreamCone -.->|returns| DownstreamCone
+  DownstreamCone -.->|has| ConeNode
+  applyPlan -.->|reads| Plan
+  applyPlan -.->|writes| PlanChange
+  PlanChange -.->|status| ChangeStatus
+  PlanChange -.->|risk| RiskLevel
   PlanChange -.->|has| ChangeTarget
   PlanChange -.->|has| ChangeIntent
   PlanChange -.->|has| NewNodeSpec

@@ -249,7 +249,7 @@ flowchart LR
 %% fm:meta plan__NewEdgeSpec name=NewEdgeSpec
 %% fm:meta plan__NewEdgeSpec desc=spec for an edge an add-change introduces: from, to, style, label
 %% fm:meta plan__PlanChange name=PlanChange
-%% fm:meta plan__PlanChange desc=one proposed change: status, target, phase, risk, intent, dependsOn, optional new node/edge
+%% fm:meta plan__PlanChange desc=one proposed change: status, target, phase, risk, intent, dependsOn, optional new node/edge, and proposed fm (the enforceable signature)
 %% fm:meta plan__PlanPhase name=PlanPhase
 %% fm:meta plan__PlanPhase desc=a milestone the changes group under: id, title, subtitle
 %% fm:meta plan__Plan name=Plan
@@ -292,6 +292,30 @@ flowchart LR
 %% fm:meta plan__synthNode i0.name=synthNode
 %% fm:meta plan__synthNode i0.accepts=c: PlanChange
 %% fm:meta plan__synthNode i0.returns=DiagramNode | null
+%% fm:meta plan__ChangeStatus name=ChangeStatus
+%% fm:meta plan__ChangeStatus desc=a change's disposition against current code: add, modify, remove
+%% fm:meta plan__Verdict name=Verdict
+%% fm:meta plan__Verdict desc=a reviewer's per-change decision: accept or reject
+%% fm:meta plan__RiskLevel name=RiskLevel
+%% fm:meta plan__RiskLevel desc=risk band carried on a change: low, med, high
+%% fm:meta plan__ConeNode name=ConeNode
+%% fm:meta plan__ConeNode desc=one affected node in a downstream cone: id plus hop distance from the change
+%% fm:meta plan__DownstreamCone name=DownstreamCone
+%% fm:meta plan__DownstreamCone desc=transitive impact result: affected cone nodes nearest-first, reached entry points, max depth
+%% fm:meta plan__downstreamCone name=downstreamCone
+%% fm:meta plan__downstreamCone desc=transitive downstream cone of a node change: every node that consumes ref, BFS backward over the edge list
+%% fm:meta plan__downstreamCone i0.name=downstreamCone
+%% fm:meta plan__downstreamCone i0.accepts=edges: DiagramEdge[]
+%% fm:meta plan__downstreamCone i0.accepts=ref: string
+%% fm:meta plan__downstreamCone i0.accepts=opts: { roots?: string[]; maxDepth?: number }
+%% fm:meta plan__downstreamCone i0.returns=DownstreamCone
+%% fm:meta plan__applyPlan name=applyPlan
+%% fm:meta plan__applyPlan desc=apply a plan's accepted changes to a base model, producing the proposed model that serialises to the approved spec (Phase 1c bridge)
+%% fm:meta plan__applyPlan i0.name=applyPlan
+%% fm:meta plan__applyPlan i0.accepts=base: { nodes: Record<string, DiagramNode>; edges: DiagramEdge[] }
+%% fm:meta plan__applyPlan i0.accepts=plan: Plan
+%% fm:meta plan__applyPlan i0.accepts=accepted: (changeId: string) => boolean
+%% fm:meta plan__applyPlan i0.returns={ nodes: Record<string, DiagramNode>; edges: DiagramEdge[] }
 %% fm:meta runtime__Runtime name=Runtime
 %% fm:meta runtime__Runtime desc=transient interaction flags render reads: editingId, linkSrc, tracedType
 %% fm:meta runtime__Runtime state=editingId: string | null
@@ -406,6 +430,18 @@ flowchart LR
 %% fm:meta state__worldBounds i0.name=worldBounds
 %% fm:meta state__worldBounds i0.accepts=state: StateStore
 %% fm:meta state__worldBounds i0.returns={ minX: number; minY: number; maxX: number; maxY: number } | null
+%% fm:meta state__sliceIds name=sliceIds
+%% fm:meta state__sliceIds desc=neighbourhood id set of a node: transitive solid up/down plus 1-hop dotted refs (the slice panel's keep set)
+%% fm:meta state__sliceIds i0.name=sliceIds
+%% fm:meta state__sliceIds i0.accepts=state: StateStore
+%% fm:meta state__sliceIds i0.accepts=id: string
+%% fm:meta state__sliceIds i0.returns=Set<string>
+%% fm:meta state__sliceStubs name=sliceStubs
+%% fm:meta state__sliceStubs desc=boundary stubs of a keep set: 1-hop neighbours that fall outside it, drawn as edge endpoints in a slice
+%% fm:meta state__sliceStubs i0.name=sliceStubs
+%% fm:meta state__sliceStubs i0.accepts=state: StateStore
+%% fm:meta state__sliceStubs i0.accepts=keep: Set<string>
+%% fm:meta state__sliceStubs i0.returns=Set<string>
 %% fm:meta types__DiagramNode name=DiagramNode
 %% fm:meta types__DiagramNode desc=one diagram node: id, label, shape, kind, colour, geometry, frontmatter, parent
 %% fm:meta types__DiagramNode state=shape: ShapeKind
@@ -1505,6 +1541,13 @@ flowchart LR
 %% kind plan__blastRadius function
 %% kind plan__coherenceWarnings function
 %% kind plan__synthNode function
+%% kind plan__ChangeStatus type
+%% kind plan__Verdict type
+%% kind plan__RiskLevel type
+%% kind plan__ConeNode type
+%% kind plan__DownstreamCone type
+%% kind plan__downstreamCone function
+%% kind plan__applyPlan function
 %% kind runtime__Runtime type
 %% kind runtime__createRuntime function
 %% kind state__StateStore type
@@ -1525,6 +1568,8 @@ flowchart LR
 %% kind state__levelFitBounds function
 %% kind state__isAncestor function
 %% kind state__worldBounds function
+%% kind state__sliceIds function
+%% kind state__sliceStubs function
 %% kind types__DiagramNode type
 %% kind types__DiagramEdge type
 %% kind types__NodeInterface type
@@ -1759,10 +1804,12 @@ flowchart LR
 %% parent plan__p_shapes plan
 %% parent plan__p_index plan
 %% parent plan__p_analysis plan
+%% parent plan__p_apply plan
 %% parent runtime__r_flags runtime
 %% parent state__st_model state
 %% parent state__st_geom state
 %% parent state__st_levels state
+%% parent state__st_slice state
 %% parent types__ty_model types
 %% parent types__ty_enums types
 %% parent types__ty_view types
@@ -1914,6 +1961,13 @@ flowchart LR
 %% src plan__blastRadius src/core/plan/plan.ts#blastRadius
 %% src plan__coherenceWarnings src/core/plan/plan.ts#coherenceWarnings
 %% src plan__synthNode src/core/plan/plan.ts#synthNode
+%% src plan__ChangeStatus src/core/plan/plan.ts#ChangeStatus
+%% src plan__Verdict src/core/plan/plan.ts#Verdict
+%% src plan__RiskLevel src/core/plan/plan.ts#RiskLevel
+%% src plan__ConeNode src/core/plan/plan.ts#ConeNode
+%% src plan__DownstreamCone src/core/plan/plan.ts#DownstreamCone
+%% src plan__downstreamCone src/core/plan/plan.ts#downstreamCone
+%% src plan__applyPlan src/core/plan/plan.ts#applyPlan
 %% src runtime__Runtime src/core/runtime/runtime.ts#Runtime
 %% src runtime__createRuntime src/core/runtime/runtime.ts#createRuntime
 %% src seed src/core/seed/seed.ts#seed
@@ -1935,6 +1989,8 @@ flowchart LR
 %% src state__levelFitBounds src/core/state/state.ts#levelFitBounds
 %% src state__isAncestor src/core/state/state.ts#isAncestor
 %% src state__worldBounds src/core/state/state.ts#worldBounds
+%% src state__sliceIds src/core/state/state.ts#sliceIds
+%% src state__sliceStubs src/core/state/state.ts#sliceStubs
 %% src types__DiagramNode src/core/types/types.ts#DiagramNode
 %% src types__DiagramEdge src/core/types/types.ts#DiagramEdge
 %% src types__NodeInterface src/core/types/types.ts#NodeInterface
@@ -2291,6 +2347,11 @@ flowchart LR
     plan__PlanPhase>"PlanPhase"]
     plan__Plan>"Plan"]
     plan__CoherenceWarning>"CoherenceWarning"]
+    plan__ChangeStatus>"ChangeStatus"]
+    plan__Verdict>"Verdict"]
+    plan__RiskLevel>"RiskLevel"]
+    plan__ConeNode>"ConeNode"]
+    plan__DownstreamCone>"DownstreamCone"]
   end
   subgraph plan__p_index ["Lifecycle + index"]
     plan__emptyPlan("emptyPlan")
@@ -2300,8 +2361,12 @@ flowchart LR
   end
   subgraph plan__p_analysis ["Review analysis"]
     plan__blastRadius("blastRadius")
+    plan__downstreamCone("downstreamCone")
     plan__coherenceWarnings("coherenceWarnings")
     plan__synthNode("synthNode")
+  end
+  subgraph plan__p_apply ["Apply → proposed spec"]
+    plan__applyPlan("applyPlan")
   end
 
   subgraph runtime__r_flags ["Interaction flags"]
@@ -2332,6 +2397,10 @@ flowchart LR
     state__levelFitBounds("levelFitBounds")
     state__isAncestor("isAncestor")
     state__worldBounds("worldBounds")
+  end
+  subgraph state__st_slice ["Neighbourhood slice"]
+    state__sliceIds("sliceIds")
+    state__sliceStubs("sliceStubs")
   end
 
   subgraph types__ty_model ["Model shapes"]
@@ -2845,10 +2914,18 @@ flowchart LR
   persistence__initPersistence -.->|returns| persistence__PersistenceApi
   plan__normalizePlan --> plan__emptyPlan
   plan__coherenceWarnings --> plan__indexById
+  plan__applyPlan --> plan__synthNode
   plan__normalizePlan -.->|returns| plan__Plan
   plan__indexByRef -.->|values| plan__PlanChange
   plan__synthNode -.->|reads| plan__PlanChange
   plan__coherenceWarnings -.->|returns| plan__CoherenceWarning
+  plan__coherenceWarnings -.->|reads| plan__Verdict
+  plan__downstreamCone -.->|returns| plan__DownstreamCone
+  plan__DownstreamCone -.->|has| plan__ConeNode
+  plan__applyPlan -.->|reads| plan__Plan
+  plan__applyPlan -.->|writes| plan__PlanChange
+  plan__PlanChange -.->|status| plan__ChangeStatus
+  plan__PlanChange -.->|risk| plan__RiskLevel
   plan__PlanChange -.->|has| plan__ChangeTarget
   plan__PlanChange -.->|has| plan__ChangeIntent
   plan__PlanChange -.->|has| plan__NewNodeSpec
@@ -2862,9 +2939,11 @@ flowchart LR
   state__levelBounds --> state__childIdsOf
   state__levelHeaderRect --> state__levelBounds
   state__levelFitBounds --> state__levelBounds
+  state__sliceStubs --> state__sliceIds
   state__createState -.->|returns| state__StateStore
   state__nodeFootprint -.->|returns| state__Footprint
   state__nodeFootprint -.->|reads measured| state__StateStore
+  state__sliceIds -.->|reads| state__StateStore
   types__DiagramNode -.->|has| types__Frontmatter
   types__Frontmatter -.->|has| types__NodeInterface
   types__DiagramNode -.->|shape| types__ShapeKind
