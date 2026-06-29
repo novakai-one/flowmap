@@ -45,6 +45,8 @@
     <label class="filebtn" id="bodiesLabel" for="bodiesInput" title="Load a bodies.json for the source viewer — read in your browser, never uploaded">Bodies</label>
     <input id="bodiesInput" type="file" accept=".json,application/json" hidden>
     <div class="bar-sep"></div>
+    <button class="filebtn" id="diffBtn" title="Diff a proposed .mmd against the current diagram">Diff</button>
+    <div class="bar-sep"></div>
     <button class="tool" id="panelBtn" title="Toggle side panel (Tab)"><span class="ic">◧</span></button>
     <button class="tool" id="helpBtn" title="Shortcuts (?)"><span class="ic">?</span></button>
   </div>
@@ -166,8 +168,43 @@
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<!-- diff workspace (full-screen overlay) -->
+<div class="diff-overlay" id="diffOverlay">
+  <div class="diff-shell">
+    <div class="diff-head">
+      <div class="diff-title">diff<span> workspace</span></div>
+      <div class="diff-counts" id="diffCounts"></div>
+      <div class="diff-head-right">
+        <button class="filebtn" id="diffApply" title="Replace current diagram with the proposal">Apply proposal</button>
+        <button class="filebtn diff-close" id="diffClose">Close</button>
+      </div>
+    </div>
+    <div class="diff-inputs" id="diffInputs">
+      <div class="diff-input-col">
+        <div class="diff-input-label">before · current diagram <span id="diffBeforeMeta"></span></div>
+        <textarea id="diffBefore" class="diff-ta" spellcheck="false" placeholder="Snapshot of the current diagram (auto-filled when you open Diff)."></textarea>
+      </div>
+      <div class="diff-input-col">
+        <div class="diff-input-label">after · proposal <button class="filebtn diff-mini" id="diffPaste">Paste</button></div>
+        <textarea id="diffAfter" class="diff-ta" spellcheck="false" placeholder="Paste the AI-proposed .mmd here, then Compare."></textarea>
+      </div>
+    </div>
+    <div class="diff-bar">
+      <button class="filebtn" id="diffCompare">Compare ↓</button>
+      <div class="diff-tabs" id="diffTabs">
+        <button class="diff-tab active" data-view="list">Review list</button>
+        <button class="diff-tab" data-view="split">Split text</button>
+        <button class="diff-tab" data-view="impact">Impact map</button>
+        <button class="diff-tab" data-view="overlay">Ghost overlay</button>
+      </div>
+    </div>
+    <div class="diff-body" id="diffBody">
+      <div class="diff-hint">Paste a proposal above and click Compare.</div>
+    </div>
+  </div>
+</div>
 
+<div class="toast" id="toast"></div>
 <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

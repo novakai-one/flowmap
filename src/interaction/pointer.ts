@@ -53,6 +53,18 @@ export function initPointer(
   let lastTrace = { type: '', t: 0 };
   const linkBtn = document.getElementById('linkBtn') as HTMLElement;
 
+  // edges with at least one endpoint in the moved-node set (for scoped reroute)
+  const incidentEdgeIds = (nodeIds: Set<string>): Set<string> => {
+    const ids = new Set<string>();
+    for (const e of state.edges) {
+      if (nodeIds.has(e.from) || nodeIds.has(e.to)) ids.add(e.id);
+    }
+    return ids;
+  };
+
+  const guides: HTMLElement[] = [];
+  const clearGuides = (): void => { guides.forEach((g) => g.remove()); guides.length = 0; };
+
   /* ---------------- starters ---------------- */
   function startDrag(e: PointerEvent): void {
     const start = camera.toWorld(e.clientX, e.clientY);

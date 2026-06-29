@@ -46,6 +46,7 @@ import { initStyleControls } from './panel/style-controls';
 import { initInspector } from './panel/inspector';
 import { initNavigator } from './panel/navigator';
 import { initSlice } from './panel/slice';
+import { initDiffWorkspace } from './panel/diff-workspace';
 import { initTabs } from './panel/tabs';
 
 import { initMermaid } from './io/mermaid';
@@ -111,6 +112,7 @@ const pointer = initPointer(ctx, camera, selection, nodes);
 const view = initView(ctx, camera);
 const navigatorMod = initNavigator(ctx, { selection, view, camera });
 const sliceMod = initSlice(ctx, { mermaid });
+const diffWorkspace = initDiffWorkspace(ctx, { mermaid });
 const contextMenu = initContextMenu(ctx, { camera, selection, nodes, clipboard, inlineEdit, view });
 
 initKeyboard(ctx, {
@@ -170,6 +172,7 @@ $('clearAll').onclick = () => {
 };
 
 $('saveBtn').onclick = files.saveMmd;
+$('diffBtn').onclick = diffWorkspace.open;
 
 $('zIn').onclick = () => camera.zoomCenter(ctx.cam.z * 1.2);
 $('zOut').onclick = () => camera.zoomCenter(ctx.cam.z / 1.2);

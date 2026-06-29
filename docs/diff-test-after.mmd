@@ -1,0 +1,27 @@
+flowchart LR
+%% fm mermaid 875 3249 160 56 rect null
+%% fm files 225 3109 160 56 rect null
+%% fm layout 225 3387 160 56 rect null
+%% fm export 225 3709 160 56 rect null
+%% fm diffWorkspace 875 4535 160 56 rect null
+%% fm diffCore 880 2750 160 56 rect null
+%% kind mermaid module
+%% kind files module
+%% kind layout function
+%% kind export module
+%% kind diffWorkspace module
+%% kind diffCore module
+%% fm:meta mermaid name=mermaid
+%% fm:meta mermaid desc=two-way Mermaid text<->model; plus emits a diff snapshot.
+  mermaid["mermaid"]
+  files["files"]
+  layout["layout (tidy)"]
+  export["export"]
+  diffWorkspace["diffWorkspace"]
+  diffCore["diffCore"]
+  files -->|load .mmd| mermaid
+  mermaid -.->|serialise| state
+  layout -->|reposition| render
+  diffWorkspace -->|reads model| mermaid
+  diffWorkspace -->|compare| diffCore
+  mermaid -.->|snapshot| diffCore
