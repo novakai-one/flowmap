@@ -1,0 +1,34 @@
+flowchart LR
+%% root slice
+
+%% src SliceApi src/panel/slice.ts#SliceApi
+%% kind SliceApi type
+%% fm:meta SliceApi name=SliceApi
+%% fm:meta SliceApi desc=public surface: render
+
+%% src initSlice src/panel/slice.ts#initSlice
+%% kind initSlice function
+%% fm:meta initSlice name=initSlice
+%% fm:meta initSlice desc=build the neighbourhood-slice panel and its Copy button, bound to ctx and the mermaid serializer
+%% fm:meta initSlice i0.name=initSlice
+%% fm:meta initSlice i0.accepts=ctx: AppContext
+%% fm:meta initSlice i0.accepts=deps: { mermaid: MermaidApi }
+%% fm:meta initSlice i0.returns=SliceApi
+
+%% src renderSlice src/panel/slice.ts#render
+%% kind renderSlice function
+%% fm:meta renderSlice name=render
+%% fm:meta renderSlice desc=show a self-contained mmd of the selected node's neighbourhood (children, parents, siblings, boundary stubs) or the whole diagram
+%% fm:meta renderSlice i0.name=render
+%% fm:meta renderSlice i0.returns=void
+
+%% parent s_api slice
+
+  subgraph s_api ["Public API"]
+    initSlice("initSlice")
+    SliceApi>"SliceApi"]
+    renderSlice("render")
+  end
+
+  initSlice -.->|returns| SliceApi
+  initSlice --> renderSlice

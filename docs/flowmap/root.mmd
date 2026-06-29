@@ -69,6 +69,14 @@ flowchart LR
 %% fm:meta styleControls desc=build and wire the Style tab: theme chips, font, toggles, routing select
 %% fm:meta theming name=theming
 %% fm:meta theming desc=translate prefs into live CSS variables and canvas state at runtime
+%% fm:meta diff name=diff
+%% fm:meta diff desc=compare two parsed models and compute the semantic delta: added, removed and changed nodes and edges
+%% fm:meta navigator name=navigator
+%% fm:meta navigator desc=searchable, filterable node list; click a row to drill, select and centre the camera
+%% fm:meta slice name=slice
+%% fm:meta slice desc=show a self-contained mmd of the selected node's neighbourhood, with a Copy button
+%% fm:meta diffWorkspace name=diffWorkspace
+%% fm:meta diffWorkspace desc=full-screen diff overlay: snapshot, paste a proposal, diff via diffModels, view four ways, apply
 
 %% kind main module
 %% kind state module
@@ -104,6 +112,10 @@ flowchart LR
 %% kind tabs module
 %% kind styleControls function
 %% kind theming module
+%% kind diff module
+%% kind navigator module
+%% kind slice module
+%% kind diffWorkspace module
 
   main["main.ts"]
   state["state"]
@@ -139,6 +151,10 @@ flowchart LR
   tabs["tabs"]
   styleControls("styleControls")
   theming["theming"]
+  diff["diff"]
+  navigator["navigator"]
+  slice["slice"]
+  diffWorkspace["diffWorkspace"]
 
   main -->|1 createState| state
   main -->|2 createHooks| context
@@ -215,3 +231,15 @@ flowchart LR
   styleControls -.->|themes| config
   styleControls -.->|applyTheme| theming
   theming -.->|THEMES| config
+  main -->|27 navigator| navigator
+  main -->|28 slice| slice
+  main -->|29 diff workspace| diffWorkspace
+  diff -.->|types| types
+  diffWorkspace -.->|diffModels| diff
+  diffWorkspace -.->|toMermaid, applyText| mermaid
+  navigator -.->|selectOnly| selection
+  navigator -.->|goTo, enter| view
+  navigator -.->|centre| camera
+  navigator -.->|childIdsOf| state
+  slice -.->|fromMermaid| mermaid
+  slice -.->|sliceIds, sliceStubs| state

@@ -1,0 +1,60 @@
+flowchart LR
+%% root diff
+
+%% src DiffInput src/core/diff/diff.ts#DiffInput
+%% kind DiffInput type
+%% fm:meta DiffInput name=DiffInput
+%% fm:meta DiffInput desc=minimal parsed-model shape the differ needs: a nodes record and an edges list
+
+%% src NodeChange src/core/diff/diff.ts#NodeChange
+%% kind NodeChange type
+%% fm:meta NodeChange name=NodeChange
+%% fm:meta NodeChange desc=one changed node field: node id, field name, before and after values
+
+%% src MmdDiff src/core/diff/diff.ts#MmdDiff
+%% kind MmdDiff type
+%% fm:meta MmdDiff name=MmdDiff
+%% fm:meta MmdDiff desc=full delta: added, removed and changed nodes and edges plus summary counts
+
+%% src edgeKey src/core/diff/diff.ts#edgeKey
+%% kind edgeKey function
+%% fm:meta edgeKey name=edgeKey
+%% fm:meta edgeKey desc=stable edge identity from source, target and style, ignoring the volatile id
+%% fm:meta edgeKey i0.name=edgeKey
+%% fm:meta edgeKey i0.accepts=e: DiagramEdge
+%% fm:meta edgeKey i0.returns=string
+
+%% src fmSig src/core/diff/diff.ts#fmSig
+%% kind fmSig function
+%% fm:meta fmSig name=fmSig
+%% fm:meta fmSig desc=stable frontmatter signature (name, description, state, interfaces) for change detection
+%% fm:meta fmSig i0.name=fmSig
+%% fm:meta fmSig i0.accepts=fm: Frontmatter | undefined
+%% fm:meta fmSig i0.returns=string
+
+%% src diffModels src/core/diff/diff.ts#diffModels
+%% kind diffModels function
+%% fm:meta diffModels name=diffModels
+%% fm:meta diffModels desc=compare two models by node id and edge key; return added, removed and changed nodes and edges
+%% fm:meta diffModels i0.name=diffModels
+%% fm:meta diffModels i0.accepts=before: DiffInput
+%% fm:meta diffModels i0.accepts=after: DiffInput
+%% fm:meta diffModels i0.returns=MmdDiff
+
+%% parent d_types diff
+%% parent d_compute diff
+
+  subgraph d_types ["Diff types"]
+    DiffInput>"DiffInput"]
+    NodeChange>"NodeChange"]
+    MmdDiff>"MmdDiff"]
+  end
+  subgraph d_compute ["Compute"]
+    diffModels("diffModels")
+    edgeKey("edgeKey")
+    fmSig("fmSig")
+  end
+
+  diffModels --> edgeKey
+  diffModels --> fmSig
+  diffModels -.->|returns| MmdDiff

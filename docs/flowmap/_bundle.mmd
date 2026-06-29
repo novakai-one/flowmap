@@ -92,6 +92,28 @@ flowchart LR
 %% fm:meta context__createHooks desc=seed Hooks with throwing placeholders so a hook called before boot fails loudly
 %% fm:meta context__createHooks i0.name=createHooks
 %% fm:meta context__createHooks i0.returns=Hooks
+%% fm:meta diff__DiffInput name=DiffInput
+%% fm:meta diff__DiffInput desc=minimal parsed-model shape the differ needs: a nodes record and an edges list
+%% fm:meta diff__NodeChange name=NodeChange
+%% fm:meta diff__NodeChange desc=one changed node field: node id, field name, before and after values
+%% fm:meta diff__MmdDiff name=MmdDiff
+%% fm:meta diff__MmdDiff desc=full delta: added, removed and changed nodes and edges plus summary counts
+%% fm:meta diff__edgeKey name=edgeKey
+%% fm:meta diff__edgeKey desc=stable edge identity from source, target and style, ignoring the volatile id
+%% fm:meta diff__edgeKey i0.name=edgeKey
+%% fm:meta diff__edgeKey i0.accepts=e: DiagramEdge
+%% fm:meta diff__edgeKey i0.returns=string
+%% fm:meta diff__fmSig name=fmSig
+%% fm:meta diff__fmSig desc=stable frontmatter signature (name, description, state, interfaces) for change detection
+%% fm:meta diff__fmSig i0.name=fmSig
+%% fm:meta diff__fmSig i0.accepts=fm: Frontmatter | undefined
+%% fm:meta diff__fmSig i0.returns=string
+%% fm:meta diff__diffModels name=diffModels
+%% fm:meta diff__diffModels desc=compare two models by node id and edge key; return added, removed and changed nodes and edges
+%% fm:meta diff__diffModels i0.name=diffModels
+%% fm:meta diff__diffModels i0.accepts=before: DiffInput
+%% fm:meta diff__diffModels i0.accepts=after: DiffInput
+%% fm:meta diff__diffModels i0.returns=MmdDiff
 %% fm:meta frontmatter__emptyInterface name=emptyInterface
 %% fm:meta frontmatter__emptyInterface desc=create a blank NodeInterface (empty name, accepts, returns)
 %% fm:meta frontmatter__emptyInterface i0.name=emptyInterface
@@ -792,6 +814,7 @@ flowchart LR
 %% fm:meta mermaid__toMermaid name=toMermaid
 %% fm:meta mermaid__toMermaid desc=serialize the model to Mermaid text with fm/kind/parent/edge/root metadata and groups
 %% fm:meta mermaid__toMermaid i0.name=toMermaid
+%% fm:meta mermaid__toMermaid i0.accepts=opts: { only?: Set<string> }
 %% fm:meta mermaid__toMermaid i0.returns=string
 %% fm:meta mermaid__sync name=sync
 %% fm:meta mermaid__sync desc=write the serialized model into the Mermaid textarea
@@ -820,6 +843,91 @@ flowchart LR
 %% fm:meta main__loadOrSeed desc=load prefs, restore autosave or seed the sample diagram, apply theme and camera
 %% fm:meta main__firstRender name=first render
 %% fm:meta main__firstRender desc=render, breadcrumb, mermaid sync, baseline history, then load optional bodies.json
+%% fm:meta diffWorkspace__ViewId name=ViewId
+%% fm:meta diffWorkspace__ViewId desc=the four diff view modes: list, split, impact, overlay
+%% fm:meta diffWorkspace__DiffWorkspaceApi name=DiffWorkspaceApi
+%% fm:meta diffWorkspace__DiffWorkspaceApi desc=public surface: open, close
+%% fm:meta diffWorkspace__initDiffWorkspace name=initDiffWorkspace
+%% fm:meta diffWorkspace__initDiffWorkspace desc=build the full-screen diff overlay, its view tabs and actions, bound to ctx and the mermaid serializer
+%% fm:meta diffWorkspace__initDiffWorkspace i0.name=initDiffWorkspace
+%% fm:meta diffWorkspace__initDiffWorkspace i0.accepts=ctx: AppContext
+%% fm:meta diffWorkspace__initDiffWorkspace i0.accepts=deps: { mermaid: MermaidApi }
+%% fm:meta diffWorkspace__initDiffWorkspace i0.returns=DiffWorkspaceApi
+%% fm:meta diffWorkspace__open name=open
+%% fm:meta diffWorkspace__open desc=snapshot the live diagram into the before pane via toMermaid and reset the UI, then show the overlay
+%% fm:meta diffWorkspace__open i0.name=open
+%% fm:meta diffWorkspace__open i0.returns=void
+%% fm:meta diffWorkspace__close name=close
+%% fm:meta diffWorkspace__close desc=hide the workspace overlay
+%% fm:meta diffWorkspace__close i0.name=close
+%% fm:meta diffWorkspace__close i0.returns=void
+%% fm:meta diffWorkspace__compare name=compare
+%% fm:meta diffWorkspace__compare desc=parse both panes via fromMermaid, compute the delta via diffModels, then render the active view
+%% fm:meta diffWorkspace__compare i0.name=compare
+%% fm:meta diffWorkspace__compare i0.returns=void
+%% fm:meta diffWorkspace__showError name=showError
+%% fm:meta diffWorkspace__showError desc=show a parse-error message for one side of the diff
+%% fm:meta diffWorkspace__showError i0.name=showError
+%% fm:meta diffWorkspace__showError i0.accepts=side: string
+%% fm:meta diffWorkspace__showError i0.accepts=err: unknown
+%% fm:meta diffWorkspace__showError i0.returns=void
+%% fm:meta diffWorkspace__renderCounts name=renderCounts
+%% fm:meta diffWorkspace__renderCounts desc=render the summary badges of node and edge add, remove and change counts
+%% fm:meta diffWorkspace__renderCounts i0.name=renderCounts
+%% fm:meta diffWorkspace__renderCounts i0.accepts=d: MmdDiff
+%% fm:meta diffWorkspace__renderCounts i0.returns=void
+%% fm:meta diffWorkspace__renderActiveView name=renderActiveView
+%% fm:meta diffWorkspace__renderActiveView desc=dispatch to the list, split, impact or overlay renderer for the current view, passing a shared ViewArg
+%% fm:meta diffWorkspace__renderActiveView i0.name=renderActiveView
+%% fm:meta diffWorkspace__renderActiveView i0.returns=void
+%% fm:meta diffWorkspace__apply name=apply
+%% fm:meta diffWorkspace__apply desc=after confirmation, write the proposal into the mermaid textarea and apply it as the live model
+%% fm:meta diffWorkspace__apply i0.name=apply
+%% fm:meta diffWorkspace__apply i0.returns=void
+%% fm:meta diffWorkspace__closeMenu name=closeMenu
+%% fm:meta diffWorkspace__closeMenu desc=hide the actions menu
+%% fm:meta diffWorkspace__closeMenu i0.name=closeMenu
+%% fm:meta diffWorkspace__closeMenu i0.returns=void
+%% fm:meta diffWorkspace__ViewArg name=ViewArg
+%% fm:meta diffWorkspace__ViewArg desc=argument every diff-view renderer receives: the diff plus both models and their texts
+%% fm:meta diffWorkspace__DiffModel name=DiffModel
+%% fm:meta diffWorkspace__DiffModel desc=the parsed-model shape a diff view reads (nodes and edges)
+%% fm:meta diffWorkspace__el name=el
+%% fm:meta diffWorkspace__el desc=small DOM element helper: tag plus optional class and text
+%% fm:meta diffWorkspace__el i0.name=el
+%% fm:meta diffWorkspace__el i0.accepts=tag: string
+%% fm:meta diffWorkspace__el i0.accepts=cls: string | undefined
+%% fm:meta diffWorkspace__el i0.accepts=text: string | undefined
+%% fm:meta diffWorkspace__el i0.returns=HTMLElement
+%% fm:meta diffWorkspace__splitEdgeKey name=splitEdgeKey
+%% fm:meta diffWorkspace__splitEdgeKey desc=parse an edge key back into its from, to and style parts
+%% fm:meta diffWorkspace__splitEdgeKey i0.name=splitEdgeKey
+%% fm:meta diffWorkspace__splitEdgeKey i0.accepts=k: string
+%% fm:meta diffWorkspace__splitEdgeKey i0.returns={ from: string; to: string; style: string }
+%% fm:meta diffWorkspace__renderList name=renderList
+%% fm:meta diffWorkspace__renderList desc=view 1, grouped collapsible change list: added, removed and changed nodes with field diffs, plus edge changes
+%% fm:meta diffWorkspace__renderList i0.name=renderList
+%% fm:meta diffWorkspace__renderList i0.accepts=host: HTMLElement
+%% fm:meta diffWorkspace__renderList i0.accepts=arg: ViewArg
+%% fm:meta diffWorkspace__renderList i0.returns=void
+%% fm:meta diffWorkspace__renderSplit name=renderSplit
+%% fm:meta diffWorkspace__renderSplit desc=view 2, git-style side-by-side line diff aligned by a Myers-lite LCS
+%% fm:meta diffWorkspace__renderSplit i0.name=renderSplit
+%% fm:meta diffWorkspace__renderSplit i0.accepts=host: HTMLElement
+%% fm:meta diffWorkspace__renderSplit i0.accepts=arg: ViewArg
+%% fm:meta diffWorkspace__renderSplit i0.returns=void
+%% fm:meta diffWorkspace__renderImpact name=renderImpact
+%% fm:meta diffWorkspace__renderImpact desc=view 3, blast radius: rank every touched node by how many edges move around it, with reasons
+%% fm:meta diffWorkspace__renderImpact i0.name=renderImpact
+%% fm:meta diffWorkspace__renderImpact i0.accepts=host: HTMLElement
+%% fm:meta diffWorkspace__renderImpact i0.accepts=arg: ViewArg
+%% fm:meta diffWorkspace__renderImpact i0.returns=void
+%% fm:meta diffWorkspace__renderOverlay name=renderOverlay
+%% fm:meta diffWorkspace__renderOverlay desc=view 4, mini-canvas SVG overlay colouring nodes by diff status, with wheel-zoom and drag-pan
+%% fm:meta diffWorkspace__renderOverlay i0.name=renderOverlay
+%% fm:meta diffWorkspace__renderOverlay i0.accepts=host: HTMLElement
+%% fm:meta diffWorkspace__renderOverlay i0.accepts=arg: ViewArg
+%% fm:meta diffWorkspace__renderOverlay i0.returns=void
 %% fm:meta inspectorFrontmatter__initInspectorFrontmatter name=initInspectorFrontmatter
 %% fm:meta inspectorFrontmatter__initInspectorFrontmatter desc=build the frontmatter editor; returns renderFrontmatterSection bound to ctx
 %% fm:meta inspectorFrontmatter__initInspectorFrontmatter i0.name=initInspectorFrontmatter
@@ -901,6 +1009,39 @@ flowchart LR
 %% fm:meta inspector__renderEdgeInspector i0.name=renderEdgeInspector
 %% fm:meta inspector__renderEdgeInspector i0.accepts=body: HTMLElement
 %% fm:meta inspector__renderEdgeInspector i0.returns=void
+%% fm:meta navigator__NavigatorApi name=NavigatorApi
+%% fm:meta navigator__NavigatorApi desc=public surface: render
+%% fm:meta navigator__initNavigator name=initNavigator
+%% fm:meta navigator__initNavigator desc=build the searchable node-list panel: search box, kind filter bar, rows; bound to ctx and deps
+%% fm:meta navigator__initNavigator i0.name=initNavigator
+%% fm:meta navigator__initNavigator i0.accepts=ctx: AppContext
+%% fm:meta navigator__initNavigator i0.accepts=deps: { selection: SelectionApi; view: ViewApi; camera: CameraApi }
+%% fm:meta navigator__initNavigator i0.returns=NavigatorApi
+%% fm:meta navigator__buildKindBar name=buildKindBar
+%% fm:meta navigator__buildKindBar desc=build the kind filter bar (All plus one button per node kind present in the model)
+%% fm:meta navigator__buildKindBar i0.name=buildKindBar
+%% fm:meta navigator__buildKindBar i0.returns=void
+%% fm:meta navigator__renderNav name=render
+%% fm:meta navigator__renderNav desc=render the node-list rows filtered by active kind and search query, each wired to navigateTo
+%% fm:meta navigator__renderNav i0.name=render
+%% fm:meta navigator__renderNav i0.returns=void
+%% fm:meta navigator__navigateTo name=navigateTo
+%% fm:meta navigator__navigateTo desc=switch drill level if needed, select the node, and centre the camera on it
+%% fm:meta navigator__navigateTo i0.name=navigateTo
+%% fm:meta navigator__navigateTo i0.accepts=id: string
+%% fm:meta navigator__navigateTo i0.returns=void
+%% fm:meta slice__SliceApi name=SliceApi
+%% fm:meta slice__SliceApi desc=public surface: render
+%% fm:meta slice__initSlice name=initSlice
+%% fm:meta slice__initSlice desc=build the neighbourhood-slice panel and its Copy button, bound to ctx and the mermaid serializer
+%% fm:meta slice__initSlice i0.name=initSlice
+%% fm:meta slice__initSlice i0.accepts=ctx: AppContext
+%% fm:meta slice__initSlice i0.accepts=deps: { mermaid: MermaidApi }
+%% fm:meta slice__initSlice i0.returns=SliceApi
+%% fm:meta slice__renderSlice name=render
+%% fm:meta slice__renderSlice desc=show a self-contained mmd of the selected node's neighbourhood (children, parents, siblings, boundary stubs) or the whole diagram
+%% fm:meta slice__renderSlice i0.name=render
+%% fm:meta slice__renderSlice i0.returns=void
 %% fm:meta styleControls name=initStyleControls
 %% fm:meta styleControls desc=build theme chips, font select, canvas toggles, card width and routing; wire to prefs
 %% fm:meta styleControls i0.name=initStyleControls
@@ -1220,6 +1361,10 @@ flowchart LR
 %% kind tabs module
 %% kind styleControls function
 %% kind theming module
+%% kind diff module
+%% kind navigator module
+%% kind slice module
+%% kind diffWorkspace module
 %% kind camera__CameraApi type
 %% kind camera__initCamera function
 %% kind camera__applyCam function
@@ -1248,6 +1393,12 @@ flowchart LR
 %% kind context__DomRefs type
 %% kind context__Hooks type
 %% kind context__createHooks function
+%% kind diff__DiffInput type
+%% kind diff__NodeChange type
+%% kind diff__MmdDiff type
+%% kind diff__edgeKey function
+%% kind diff__fmSig function
+%% kind diff__diffModels function
 %% kind frontmatter__emptyInterface function
 %% kind frontmatter__emptyFrontmatter function
 %% kind frontmatter__normalizeFrontmatter function
@@ -1410,6 +1561,25 @@ flowchart LR
 %% kind main__bindToolbar function
 %% kind main__loadOrSeed function
 %% kind main__firstRender function
+%% kind diffWorkspace__ViewId type
+%% kind diffWorkspace__DiffWorkspaceApi type
+%% kind diffWorkspace__initDiffWorkspace function
+%% kind diffWorkspace__open function
+%% kind diffWorkspace__close function
+%% kind diffWorkspace__compare function
+%% kind diffWorkspace__showError function
+%% kind diffWorkspace__renderCounts function
+%% kind diffWorkspace__renderActiveView function
+%% kind diffWorkspace__apply function
+%% kind diffWorkspace__closeMenu function
+%% kind diffWorkspace__ViewArg type
+%% kind diffWorkspace__DiffModel type
+%% kind diffWorkspace__el function
+%% kind diffWorkspace__splitEdgeKey function
+%% kind diffWorkspace__renderList function
+%% kind diffWorkspace__renderSplit function
+%% kind diffWorkspace__renderImpact function
+%% kind diffWorkspace__renderOverlay function
 %% kind inspectorFrontmatter__initInspectorFrontmatter function
 %% kind inspectorFrontmatter__stateRowsHtml function
 %% kind inspectorFrontmatter__ifaceListRowsHtml function
@@ -1426,6 +1596,14 @@ flowchart LR
 %% kind inspector__renderSingleInspector function
 %% kind inspector__renderMultiInspector function
 %% kind inspector__renderEdgeInspector function
+%% kind navigator__NavigatorApi type
+%% kind navigator__initNavigator function
+%% kind navigator__buildKindBar function
+%% kind navigator__renderNav function
+%% kind navigator__navigateTo function
+%% kind slice__SliceApi type
+%% kind slice__initSlice function
+%% kind slice__renderSlice function
 %% kind tabs__TabsApi type
 %% kind tabs__initTabs function
 %% kind tabs__showTab function
@@ -1489,6 +1667,8 @@ flowchart LR
 %% parent config__cfg_helpers config
 %% parent config__cfg_types config
 %% parent context__ctx_seam context
+%% parent diff__d_types diff
+%% parent diff__d_compute diff
 %% parent frontmatter__fm_life frontmatter
 %% parent frontmatter__fm_io frontmatter
 %% parent frontmatter__fm_types frontmatter
@@ -1542,12 +1722,19 @@ flowchart LR
 %% parent main__mb_build main
 %% parent main__mb_init main
 %% parent main__mb_boot main
+%% parent diffWorkspace__dw_api diffWorkspace
+%% parent diffWorkspace__dw_flow diffWorkspace
+%% parent diffWorkspace__dw_views diffWorkspace
+%% parent diffWorkspace__dw_viewtypes diffWorkspace
 %% parent inspectorFrontmatter__if_api inspectorFrontmatter
 %% parent inspectorFrontmatter__if_html inspectorFrontmatter
 %% parent inspectorFrontmatter__if_wire inspectorFrontmatter
 %% parent inspector__in_api inspector
 %% parent inspector__in_render inspector
 %% parent inspector__in_panes inspector
+%% parent navigator__n_api navigator
+%% parent navigator__n_internal navigator
+%% parent slice__s_api slice
 %% parent tabs__tb_api tabs
 %% parent tabs__tb_ui tabs
 %% parent theming__th_api theming
@@ -1594,6 +1781,12 @@ flowchart LR
 %% src context__DomRefs src/core/context/context.ts#DomRefs
 %% src context__Hooks src/core/context/context.ts#Hooks
 %% src context__createHooks src/core/context/context.ts#createHooks
+%% src diff__DiffInput src/core/diff/diff.ts#DiffInput
+%% src diff__NodeChange src/core/diff/diff.ts#NodeChange
+%% src diff__MmdDiff src/core/diff/diff.ts#MmdDiff
+%% src diff__edgeKey src/core/diff/diff.ts#edgeKey
+%% src diff__fmSig src/core/diff/diff.ts#fmSig
+%% src diff__diffModels src/core/diff/diff.ts#diffModels
 %% src frontmatter__emptyInterface src/core/frontmatter/frontmatter.ts#emptyInterface
 %% src frontmatter__emptyFrontmatter src/core/frontmatter/frontmatter.ts#emptyFrontmatter
 %% src frontmatter__normalizeFrontmatter src/core/frontmatter/frontmatter.ts#normalizeFrontmatter
@@ -1744,6 +1937,25 @@ flowchart LR
 %% src mermaid__sync src/io/mermaid.ts#sync
 %% src mermaid__fromMermaid src/io/mermaid.ts#fromMermaid
 %% src mermaid__applyText src/io/mermaid.ts#applyText
+%% src diffWorkspace__ViewId src/panel/diff-workspace.ts#ViewId
+%% src diffWorkspace__DiffWorkspaceApi src/panel/diff-workspace.ts#DiffWorkspaceApi
+%% src diffWorkspace__initDiffWorkspace src/panel/diff-workspace.ts#initDiffWorkspace
+%% src diffWorkspace__open src/panel/diff-workspace.ts#open
+%% src diffWorkspace__close src/panel/diff-workspace.ts#close
+%% src diffWorkspace__compare src/panel/diff-workspace.ts#compare
+%% src diffWorkspace__showError src/panel/diff-workspace.ts#showError
+%% src diffWorkspace__renderCounts src/panel/diff-workspace.ts#renderCounts
+%% src diffWorkspace__renderActiveView src/panel/diff-workspace.ts#renderActiveView
+%% src diffWorkspace__apply src/panel/diff-workspace.ts#apply
+%% src diffWorkspace__closeMenu src/panel/diff-workspace.ts#closeMenu
+%% src diffWorkspace__ViewArg src/panel/diff-views/types.ts#ViewArg
+%% src diffWorkspace__DiffModel src/panel/diff-views/types.ts#DiffModel
+%% src diffWorkspace__el src/panel/diff-views/types.ts#el
+%% src diffWorkspace__splitEdgeKey src/panel/diff-views/types.ts#splitEdgeKey
+%% src diffWorkspace__renderList src/panel/diff-views/list.ts#renderList
+%% src diffWorkspace__renderSplit src/panel/diff-views/split.ts#renderSplit
+%% src diffWorkspace__renderImpact src/panel/diff-views/impact.ts#renderImpact
+%% src diffWorkspace__renderOverlay src/panel/diff-views/overlay.ts#renderOverlay
 %% src inspectorFrontmatter__initInspectorFrontmatter src/panel/inspector-frontmatter.ts#initInspectorFrontmatter
 %% src inspectorFrontmatter__stateRowsHtml src/panel/inspector-frontmatter.ts#stateRowsHtml
 %% src inspectorFrontmatter__ifaceListRowsHtml src/panel/inspector-frontmatter.ts#ifaceListRowsHtml
@@ -1760,6 +1972,14 @@ flowchart LR
 %% src inspector__renderSingleInspector src/panel/inspector.ts#renderSingleInspector
 %% src inspector__renderMultiInspector src/panel/inspector.ts#renderMultiInspector
 %% src inspector__renderEdgeInspector src/panel/inspector.ts#renderEdgeInspector
+%% src navigator__NavigatorApi src/panel/navigator.ts#NavigatorApi
+%% src navigator__initNavigator src/panel/navigator.ts#initNavigator
+%% src navigator__buildKindBar src/panel/navigator.ts#buildKindBar
+%% src navigator__renderNav src/panel/navigator.ts#render
+%% src navigator__navigateTo src/panel/navigator.ts#navigateTo
+%% src slice__SliceApi src/panel/slice.ts#SliceApi
+%% src slice__initSlice src/panel/slice.ts#initSlice
+%% src slice__renderSlice src/panel/slice.ts#render
 %% src styleControls src/panel/style-controls.ts#initStyleControls
 %% src tabs__TabsApi src/panel/tabs.ts#TabsApi
 %% src tabs__initTabs src/panel/tabs.ts#initTabs
@@ -1851,6 +2071,10 @@ flowchart LR
   tabs["tabs"]
   styleControls("styleControls")
   theming["theming"]
+  diff["diff"]
+  navigator["navigator"]
+  slice["slice"]
+  diffWorkspace["diffWorkspace"]
 
   subgraph camera__c_api ["API + factory"]
     camera__CameraApi>"CameraApi"]
@@ -1895,6 +2119,17 @@ flowchart LR
     context__DomRefs>"DomRefs"]
     context__Hooks>"Hooks"]
     context__createHooks("createHooks")
+  end
+
+  subgraph diff__d_types ["Diff types"]
+    diff__DiffInput>"DiffInput"]
+    diff__NodeChange>"NodeChange"]
+    diff__MmdDiff>"MmdDiff"]
+  end
+  subgraph diff__d_compute ["Compute"]
+    diff__diffModels("diffModels")
+    diff__edgeKey("edgeKey")
+    diff__fmSig("fmSig")
   end
 
   subgraph frontmatter__fm_life ["Lifecycle + emptiness"]
@@ -2185,6 +2420,34 @@ flowchart LR
     main__firstRender("first render")
   end
 
+  subgraph diffWorkspace__dw_api ["Public API"]
+    diffWorkspace__initDiffWorkspace("initDiffWorkspace")
+    diffWorkspace__DiffWorkspaceApi>"DiffWorkspaceApi"]
+    diffWorkspace__ViewId>"ViewId"]
+  end
+  subgraph diffWorkspace__dw_flow ["Workspace flow"]
+    diffWorkspace__open("open")
+    diffWorkspace__close("close")
+    diffWorkspace__compare("compare")
+    diffWorkspace__renderCounts("renderCounts")
+    diffWorkspace__renderActiveView("renderActiveView")
+    diffWorkspace__apply("apply")
+    diffWorkspace__showError("showError")
+    diffWorkspace__closeMenu("closeMenu")
+  end
+  subgraph diffWorkspace__dw_views ["Diff views"]
+    diffWorkspace__renderList("renderList")
+    diffWorkspace__renderSplit("renderSplit")
+    diffWorkspace__renderImpact("renderImpact")
+    diffWorkspace__renderOverlay("renderOverlay")
+  end
+  subgraph diffWorkspace__dw_viewtypes ["View helpers"]
+    diffWorkspace__ViewArg>"ViewArg"]
+    diffWorkspace__DiffModel>"DiffModel"]
+    diffWorkspace__el("el")
+    diffWorkspace__splitEdgeKey("splitEdgeKey")
+  end
+
   subgraph inspectorFrontmatter__if_api ["API + factory"]
     inspectorFrontmatter__initInspectorFrontmatter("initInspectorFrontmatter")
   end
@@ -2213,6 +2476,22 @@ flowchart LR
     inspector__renderSingleInspector("renderSingleInspector")
     inspector__renderMultiInspector("renderMultiInspector")
     inspector__renderEdgeInspector("renderEdgeInspector")
+  end
+
+  subgraph navigator__n_api ["Public API"]
+    navigator__initNavigator("initNavigator")
+    navigator__NavigatorApi>"NavigatorApi"]
+  end
+  subgraph navigator__n_internal ["List + filter"]
+    navigator__buildKindBar("buildKindBar")
+    navigator__renderNav("render")
+    navigator__navigateTo("navigateTo")
+  end
+
+  subgraph slice__s_api ["Public API"]
+    slice__initSlice("initSlice")
+    slice__SliceApi>"SliceApi"]
+    slice__renderSlice("render")
   end
 
   subgraph tabs__tb_api ["API + factory"]
@@ -2389,6 +2668,18 @@ flowchart LR
   styleControls -.->|themes| config
   styleControls -.->|applyTheme| theming
   theming -.->|THEMES| config
+  main -->|27 navigator| navigator
+  main -->|28 slice| slice
+  main -->|29 diff workspace| diffWorkspace
+  diff -.->|types| types
+  diffWorkspace -.->|diffModels| diff
+  diffWorkspace -.->|toMermaid, applyText| mermaid
+  navigator -.->|selectOnly| selection
+  navigator -.->|goTo, enter| view
+  navigator -.->|centre| camera
+  navigator -.->|childIdsOf| state
+  slice -.->|fromMermaid| mermaid
+  slice -.->|sliceIds, sliceStubs| state
   camera__zoomCenter --> camera__zoomAt
   camera__zoomAt --> camera__applyCam
   camera__zoomToFit --> camera__applyCam
@@ -2399,6 +2690,9 @@ flowchart LR
   config__FONTS -.->|shape of| config__FontDef
   context__createHooks -.->|returns| context__Hooks
   context__AppContext -.->|holds| context__Hooks
+  diff__diffModels --> diff__edgeKey
+  diff__diffModels --> diff__fmSig
+  diff__diffModels -.->|returns| diff__MmdDiff
   frontmatter__normalizeFrontmatter --> frontmatter__emptyFrontmatter
   frontmatter__frontmatterToMermaid --> frontmatter__isFrontmatterEmpty
   frontmatter__frontmatterToMermaid --> frontmatter__pruneFrontmatter
@@ -2484,6 +2778,20 @@ flowchart LR
   main__wireHooks --> main__bindToolbar
   main__bindToolbar --> main__loadOrSeed
   main__loadOrSeed --> main__firstRender
+  diffWorkspace__initDiffWorkspace -.->|returns| diffWorkspace__DiffWorkspaceApi
+  diffWorkspace__initDiffWorkspace --> diffWorkspace__open
+  diffWorkspace__initDiffWorkspace --> diffWorkspace__close
+  diffWorkspace__open --> diffWorkspace__compare
+  diffWorkspace__compare --> diffWorkspace__renderCounts
+  diffWorkspace__compare --> diffWorkspace__renderActiveView
+  diffWorkspace__renderActiveView --> diffWorkspace__renderList
+  diffWorkspace__renderActiveView --> diffWorkspace__renderSplit
+  diffWorkspace__renderActiveView --> diffWorkspace__renderImpact
+  diffWorkspace__renderActiveView --> diffWorkspace__renderOverlay
+  diffWorkspace__renderList --> diffWorkspace__el
+  diffWorkspace__renderSplit --> diffWorkspace__el
+  diffWorkspace__renderImpact --> diffWorkspace__el
+  diffWorkspace__renderOverlay --> diffWorkspace__splitEdgeKey
   inspectorFrontmatter__initInspectorFrontmatter -.->|returns| inspectorFrontmatter__renderFm
   inspectorFrontmatter__renderFm --> inspectorFrontmatter__stateRowsHtml
   inspectorFrontmatter__renderFm --> inspectorFrontmatter__ifaceBlockHtml
@@ -2497,6 +2805,12 @@ flowchart LR
   inspector__renderInspector --> inspector__updateSource
   inspector__renderInspector --> inspector__updateStatus
   inspector__initInspector -.->|returns| inspector__InspectorApi
+  navigator__initNavigator -.->|returns| navigator__NavigatorApi
+  navigator__initNavigator --> navigator__buildKindBar
+  navigator__initNavigator --> navigator__renderNav
+  navigator__renderNav --> navigator__navigateTo
+  slice__initSlice -.->|returns| slice__SliceApi
+  slice__initSlice --> slice__renderSlice
   tabs__initTabs -.->|returns| tabs__TabsApi
   theming__initTheming -.->|returns| theming__ThemingApi
   avoidRouter__ensureRoutes --> avoidRouter__routeReferences
