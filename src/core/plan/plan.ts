@@ -218,6 +218,43 @@ export function synthNode(c: PlanChange): DiagramNode | null {
   };
 }
 
+/** One node's identity + position for the planner review-canvas layout. */
+export interface PlanLayoutNode {
+  id: string;
+  /** the node's real ctx.state position (used verbatim for real nodes) */
+  x: number;
+  y: number;
+  /** drill-in parent (used to place a synth node near its parent) */
+  parent?: string | null;
+  /** true when this is a synthesised add-node (not present in ctx.state) */
+  synth?: boolean;
+}
+
+/**
+ * Positions for one drill level of the planner review canvas.
+ *
+ * D1 — layout fidelity (the human layer): every REAL node renders at its exact
+ * ctx.state (x, y) — the very layout the human sees on the live canvas — never a
+ * re-simulated force-sim position. Only synthesised add-nodes (not yet in
+ * ctx.state) get a computed slot: beside their parent when it has one, else
+ * parked in a column to the right of the real bounding box, so additions read as
+ * deltas without ever displacing or overlapping the real map. Pure.
+ */
+export function levelPositions(nodes: PlanLayoutNode[]): Record<string, { x: number; y: number }> {
+  const pos: Record<string, { x: number; y: number }> = {};
+  const reals = nodes.filter((n) => !n.synth);
+  for (const n of reals) pos[n.id] = { x: n.x, y: n.y };
+  const maxX = reals.length ? Math.max(...reals.map((n) => n.x)) : 0;
+  const minY = reals.length ? Math.min(...reals.map((n) => n.y)) : 0;
+  let col = 0;
+  for (const n of nodes.filter((n) => n.synth)) {
+    const pp = n.parent ? pos[n.parent] : undefined;
+    pos[n.id] = pp ? { x: pp.x + 240, y: pp.y + col * 72 } : { x: maxX + 260, y: minY + 120 + col * 120 };
+    col++;
+  }
+  return pos;
+}
+
 /** One affected node in a downstream cone, with its hop distance from the change. */
 export interface ConeNode {
   id: string;

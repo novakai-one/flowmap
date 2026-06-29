@@ -28,8 +28,8 @@ import type { MermaidApi } from '../io/mermaid';
 import { childIdsOf, containerOf } from '../core/state/state';
 import { frontmatterToMermaid } from '../core/frontmatter/frontmatter';
 import {
-  normalizePlan, indexByRef, indexById, downstreamCone, coherenceWarnings, synthNode, applyPlan,
-  type Plan, type PlanChange, type Verdict,
+  normalizePlan, indexByRef, indexById, downstreamCone, coherenceWarnings, synthNode, applyPlan, levelPositions,
+  type Plan, type PlanChange, type Verdict, type PlanLayoutNode,
 } from '../core/plan/plan';
 import type { Frontmatter } from '../core/types/types';
 
@@ -228,70 +228,26 @@ export function initPlanner(ctx: AppContext, deps: { mermaid: MermaidApi }): Pla
     return [...real, ...syn];
   }
 
-  /* ---- section caption for a drilled child (its group parent label) ---- */
-  function sectionOf(id: string): string {
-    const p = ctx.state.nodes[id]?.parent;
-    if (p && ctx.state.nodes[p]?.shape === 'group') return ctx.state.nodes[p].label;
-    return '';
-  }
-
   /* =================== layout =================== */
+  /**
+   * D1 — layout fidelity: the review canvas mirrors the human's REAL ctx.state
+   * positions (the live canvas), never a re-simulated force layout. Real nodes
+   * use their verbatim (x, y); only synth add-nodes get a computed slot. The
+   * placement rule is the pure levelPositions() in core/plan, so it is testable.
+   */
   function layoutLevel(): Record<string, { x: number; y: number }> {
     const key = level ?? '__top__';
     if (posCache[key]) return posCache[key];
     const ids = levelNodes();
-    const pos: Record<string, { x: number; y: number }> = {};
-    if (level === null) {
-      forceLayout(ids, pos);
-    } else {
-      // group by section, stacked rows of 3
-      const secs = new Map<string, string[]>();
-      ids.forEach((id) => { const s = sectionOf(id); if (!secs.has(s)) secs.set(s, []); secs.get(s)!.push(id); });
-      let y = 60;
-      for (const [, members] of secs) {
-        members.forEach((id, i) => { pos[id] = { x: 40 + (i % 3) * 220, y: y + Math.floor(i / 3) * 78 }; });
-        y += Math.ceil(members.length / 3) * 78 + 44;
-      }
-    }
+    const lnodes: PlanLayoutNode[] = ids.map((id) => {
+      const real = ctx.state.nodes[id];
+      if (real) return { id, x: real.x, y: real.y, synth: false };
+      const s = synth[id];
+      return { id, x: 0, y: 0, parent: s?.parent ?? null, synth: true };
+    });
+    const pos = levelPositions(lnodes);
     posCache[key] = pos;
     return pos;
-  }
-
-  /** Tiny force sim for the top level (seeded from real x/y when present). */
-  function forceLayout(ids: string[], pos: Record<string, { x: number; y: number }>): void {
-    const N = ids.map((id, i) => {
-      const n = node(id)!;
-      const seedX = n.x || (200 + Math.cos(i) * 320);
-      const seedY = n.y || (200 + Math.sin(i * 1.3) * 280);
-      return { id, x: seedX * 0.15 + 200 + Math.cos(i) * 300, y: seedY * 0.1 + 200 + Math.sin(i * 1.3) * 260, vx: 0, vy: 0 };
-    });
-    const idset = new Set(ids);
-    const E = ctx.state.edges.filter((e) => idset.has(e.from) && idset.has(e.to));
-    const idx: Record<string, typeof N[number]> = {};
-    N.forEach((n) => { idx[n.id] = n; });
-    for (let it = 0; it < 300; it++) {
-      for (let i = 0; i < N.length; i++) for (let j = i + 1; j < N.length; j++) {
-        const a = N[i], b = N[j]; let dx = a.x - b.x, dy = a.y - b.y; const d2 = dx * dx + dy * dy + 0.01;
-        const f = 44000 / d2; const d = Math.sqrt(d2); dx /= d; dy /= d;
-        a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
-      }
-      E.forEach((e) => {
-        const a = idx[e.from], b = idx[e.to]; if (!a || !b) return;
-        let dx = b.x - a.x, dy = b.y - a.y; const d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-        const rest = e.style === 'dotted' ? 270 : 200; const f = (d - rest) * 0.02; dx /= d; dy /= d;
-        a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
-      });
-      N.forEach((n) => {
-        n.vx += (440 - n.x) * 0.002; n.vy += (360 - n.y) * 0.002;
-        n.x += Math.max(-18, Math.min(18, n.vx)); n.y += Math.max(-18, Math.min(18, n.vy));
-        n.vx *= 0.86; n.vy *= 0.86;
-      });
-    }
-    N.forEach((n) => { pos[n.id] = { x: n.x, y: n.y }; });
-    // park new top-level nodes in a column to the right
-    const xs = N.map((n) => n.x); const maxx = xs.length ? Math.max(...xs) : 400;
-    let pi = 0;
-    ids.filter((id) => synth[id]).forEach((id) => { pos[id] = { x: maxx + 260, y: 120 + pi * 120 }; pi++; });
   }
 
   /* =================== camera =================== */

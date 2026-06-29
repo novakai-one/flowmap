@@ -2,23 +2,29 @@
 /**
  * scaffold.mjs — Flowmap scaffold tool
  *
- * Two modes:
+ * Three modes:
  *   --backfill <fragment.mmd>  Read %% src directives, find real TS signatures,
  *                              inject i0.accepts/i0.returns lines with real types
  *                              for leaf nodes that lack them. Idempotent.
  *   --init                     Walk a TS project with no fragments, emit draft
  *                              fragments + root.mmd with all mechanical lines
  *                              pre-filled. Output FAILS flowmap-lint by design.
+ *   --add-from-plan <plan.json> --fragment <fragment.mmd>
+ *                              Append new nodes from an approved plan into a
+ *                              fragment file. Idempotent — nodes already present
+ *                              are skipped. Use --dry to preview without writing.
  *
  * Usage:
  *   node scaffold.mjs --backfill <fragment.mmd> --tsconfig <tsconfig.json> [--dry]
  *   node scaffold.mjs --init --tsconfig <tsconfig.json> --src <srcDir> --out <outDir> [--force] [--dry]
+ *   node scaffold.mjs --add-from-plan <plan.json> --fragment <fragment.mmd> [--dry]
  */
 
 import { Project, Node } from 'ts-morph';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { resolve, join, relative, basename, dirname } from 'path';
 import { findSymbol, signatureAtBanner } from './extract.mjs';
+import { parseMmd } from './mmd-parse.mjs';
 
 const GATED = new Set(['class', 'function', 'hook', 'type']);
 const D_SRC = /^%%\s*src\s+([A-Za-z0-9_]+)\s+(\S+)\s*$/;
@@ -427,6 +433,95 @@ function init(srcDir, outDir, project, force, dry) {
   }
 }
 
+// ─── Add-from-plan mode ───────────────────────────────────────────────
+
+/**
+ * Append new nodes from an approved plan into a flowmap fragment.
+ * Exported for use in tests. Idempotent.
+ *
+ * @param {string} planPath  path to the plan JSON file
+ * @param {string} fragmentPath  path to the fragment .mmd file
+ * @param {boolean} dry  if true, print the lines that would be added but do not write
+ */
+function addFromPlan(planPath, fragmentPath, dry) {
+  const planJson = JSON.parse(readFileSync(planPath, 'utf8'));
+  const fragmentText = readFileSync(fragmentPath, 'utf8');
+
+  // Collect add-node changes from the plan
+  const changes = Array.isArray(planJson.changes) ? planJson.changes : [];
+  const addChanges = changes.filter(
+    (c) => c.status === 'add' && c.target && c.target.kind === 'node' && c.newNode,
+  );
+
+  // Detect nodes already present in the fragment using kindMap from parseFragment
+  const frag = parseFragment(fragmentText);
+  const existingIds = new Set(Object.keys(frag.kindMap));
+
+  // Also check parseMmd to catch node-def lines without a %% kind directive
+  const parsed = parseMmd(fragmentText);
+  for (const id of Object.keys(parsed.nodes)) existingIds.add(id);
+
+  const newChanges = addChanges.filter((c) => !existingIds.has(c.target.ref));
+
+  if (newChanges.length === 0) {
+    console.log(`${fragmentPath}: no new nodes to add`);
+    return;
+  }
+
+  // Build the block of lines for each new node
+  const allNewLines = [];
+  for (const change of newChanges) {
+    const id = change.target.ref;
+    const newNode = change.newNode;
+    const fm = change.fm;
+    const kind = (newNode.kind) || 'module';
+    const label = (fm && fm.name) || newNode.label;
+    const desc = (fm && fm.description) || '';
+
+    const block = [];
+    block.push(`%% kind ${id} ${kind}`);
+    block.push(`%% fm:meta ${id} name=${label}`);
+    block.push(`%% fm:meta ${id} desc=${desc}`);
+
+    if (fm && Array.isArray(fm.interfaces)) {
+      fm.interfaces.forEach((iface, n) => {
+        if (iface.name !== undefined) block.push(`%% fm:meta ${id} i${n}.name=${iface.name}`);
+        for (const a of (iface.accepts || [])) block.push(`%% fm:meta ${id} i${n}.accepts=${a}`);
+        for (const r of (iface.returns || [])) block.push(`%% fm:meta ${id} i${n}.returns=${r}`);
+      });
+    }
+
+    if (newNode.parent) block.push(`%% parent ${id} ${newNode.parent}`);
+
+    const shape = kind === 'function' ? `("${newNode.label}")` : `["${newNode.label}"]`;
+    block.push(`  ${id}${shape}`);
+    block.push('');
+
+    allNewLines.push(...block);
+  }
+
+  const addedIds = newChanges.map((c) => c.target.ref);
+
+  if (dry) {
+    console.log(`[dry-run] ${fragmentPath}: +${newChanges.length} new node(s) from plan (${addedIds.join(', ')})`);
+    for (const l of allNewLines) console.log(`  + ${l}`);
+    return;
+  }
+
+  // Append at end of file (after ensuring trailing newline)
+  let out = fragmentText;
+  if (out.length > 0 && !out.endsWith('\n')) out += '\n';
+  out += allNewLines.join('\n');
+  // Ensure single trailing newline
+  out = out.replace(/\n+$/, '\n');
+
+  writeFileSync(fragmentPath, out);
+  console.log(`${fragmentPath}: +${newChanges.length} new node(s) from plan (${addedIds.join(', ')})`);
+
+  // Verify parseMmd still works cleanly
+  parseMmd(readFileSync(fragmentPath, 'utf8'));
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────
 
 function main() {
@@ -457,10 +552,24 @@ function main() {
     return;
   }
 
+  if (hasFlag('--add-from-plan')) {
+    const planFile = arg('--add-from-plan');
+    const fragment = arg('--fragment');
+    if (!planFile || !fragment) {
+      console.error('Usage: --add-from-plan <plan.json> --fragment <fragment.mmd> [--dry]');
+      process.exit(2);
+    }
+    addFromPlan(planFile, fragment, dry);
+    return;
+  }
+
   console.error('Usage:');
   console.error('  scaffold.mjs --backfill <fragment.mmd> --tsconfig <tsconfig.json> [--dry]');
   console.error('  scaffold.mjs --init --tsconfig <tsconfig.json> --src <srcDir> --out <outDir> [--force]');
+  console.error('  scaffold.mjs --add-from-plan <plan.json> --fragment <fragment.mmd> [--dry]');
   process.exit(2);
 }
 
-main();
+export { addFromPlan };
+
+if (import.meta.url === `file://${process.argv[1]}`) main();

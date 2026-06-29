@@ -113,6 +113,19 @@ flowchart LR
 %% fm:meta RiskLevel name=RiskLevel
 %% fm:meta RiskLevel desc=risk band carried on a change: low, med, high
 
+%% src PlanLayoutNode src/core/plan/plan.ts#PlanLayoutNode
+%% kind PlanLayoutNode type
+%% fm:meta PlanLayoutNode name=PlanLayoutNode
+%% fm:meta PlanLayoutNode desc=a node's id, real ctx.state position, parent and synth flag for the planner review-canvas layout
+
+%% src levelPositions src/core/plan/plan.ts#levelPositions
+%% kind levelPositions function
+%% fm:meta levelPositions name=levelPositions
+%% fm:meta levelPositions desc=D1 layout fidelity — real nodes render at their verbatim ctx.state position; only synth add-nodes get a computed slot
+%% fm:meta levelPositions i0.name=levelPositions
+%% fm:meta levelPositions i0.accepts=nodes: PlanLayoutNode[]
+%% fm:meta levelPositions i0.returns=Record<string, { x: number; y: number }>
+
 %% src ConeNode src/core/plan/plan.ts#ConeNode
 %% kind ConeNode type
 %% fm:meta ConeNode name=ConeNode
@@ -162,6 +175,7 @@ flowchart LR
     RiskLevel>"RiskLevel"]
     ConeNode>"ConeNode"]
     DownstreamCone>"DownstreamCone"]
+    PlanLayoutNode>"PlanLayoutNode"]
   end
   subgraph p_index ["Lifecycle + index"]
     emptyPlan("emptyPlan")
@@ -174,6 +188,7 @@ flowchart LR
     downstreamCone("downstreamCone")
     coherenceWarnings("coherenceWarnings")
     synthNode("synthNode")
+    levelPositions("levelPositions")
   end
   subgraph p_apply ["Apply → proposed spec"]
     applyPlan("applyPlan")
@@ -198,3 +213,4 @@ flowchart LR
   PlanChange -.->|has| NewNodeSpec
   PlanChange -.->|has| NewEdgeSpec
   Plan -.->|has| PlanPhase
+  levelPositions -.->|reads| PlanLayoutNode

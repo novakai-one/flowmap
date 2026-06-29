@@ -298,6 +298,13 @@ flowchart LR
 %% fm:meta plan__Verdict desc=a reviewer's per-change decision: accept or reject
 %% fm:meta plan__RiskLevel name=RiskLevel
 %% fm:meta plan__RiskLevel desc=risk band carried on a change: low, med, high
+%% fm:meta plan__PlanLayoutNode name=PlanLayoutNode
+%% fm:meta plan__PlanLayoutNode desc=a node's id, real ctx.state position, parent and synth flag for the planner review-canvas layout
+%% fm:meta plan__levelPositions name=levelPositions
+%% fm:meta plan__levelPositions desc=D1 layout fidelity — real nodes render at their verbatim ctx.state position; only synth add-nodes get a computed slot
+%% fm:meta plan__levelPositions i0.name=levelPositions
+%% fm:meta plan__levelPositions i0.accepts=nodes: PlanLayoutNode[]
+%% fm:meta plan__levelPositions i0.returns=Record<string, { x: number; y: number }>
 %% fm:meta plan__ConeNode name=ConeNode
 %% fm:meta plan__ConeNode desc=one affected node in a downstream cone: id plus hop distance from the change
 %% fm:meta plan__DownstreamCone name=DownstreamCone
@@ -1544,6 +1551,8 @@ flowchart LR
 %% kind plan__ChangeStatus type
 %% kind plan__Verdict type
 %% kind plan__RiskLevel type
+%% kind plan__PlanLayoutNode type
+%% kind plan__levelPositions function
 %% kind plan__ConeNode type
 %% kind plan__DownstreamCone type
 %% kind plan__downstreamCone function
@@ -1964,6 +1973,8 @@ flowchart LR
 %% src plan__ChangeStatus src/core/plan/plan.ts#ChangeStatus
 %% src plan__Verdict src/core/plan/plan.ts#Verdict
 %% src plan__RiskLevel src/core/plan/plan.ts#RiskLevel
+%% src plan__PlanLayoutNode src/core/plan/plan.ts#PlanLayoutNode
+%% src plan__levelPositions src/core/plan/plan.ts#levelPositions
 %% src plan__ConeNode src/core/plan/plan.ts#ConeNode
 %% src plan__DownstreamCone src/core/plan/plan.ts#DownstreamCone
 %% src plan__downstreamCone src/core/plan/plan.ts#downstreamCone
@@ -2352,6 +2363,7 @@ flowchart LR
     plan__RiskLevel>"RiskLevel"]
     plan__ConeNode>"ConeNode"]
     plan__DownstreamCone>"DownstreamCone"]
+    plan__PlanLayoutNode>"PlanLayoutNode"]
   end
   subgraph plan__p_index ["Lifecycle + index"]
     plan__emptyPlan("emptyPlan")
@@ -2364,6 +2376,7 @@ flowchart LR
     plan__downstreamCone("downstreamCone")
     plan__coherenceWarnings("coherenceWarnings")
     plan__synthNode("synthNode")
+    plan__levelPositions("levelPositions")
   end
   subgraph plan__p_apply ["Apply → proposed spec"]
     plan__applyPlan("applyPlan")
@@ -2931,6 +2944,7 @@ flowchart LR
   plan__PlanChange -.->|has| plan__NewNodeSpec
   plan__PlanChange -.->|has| plan__NewEdgeSpec
   plan__Plan -.->|has| plan__PlanPhase
+  plan__levelPositions -.->|reads| plan__PlanLayoutNode
   runtime__createRuntime -.->|returns| runtime__Runtime
   state__bestSides --> state__nodeCenter
   state__nodeAtPoint --> state__containerOf
