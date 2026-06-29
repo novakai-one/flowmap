@@ -133,6 +133,14 @@ if (CMD === 'check') {
   const answers = given.questions ? given : given; // accept raw {qid:ans} or wrapped
   const ansMap = given.answers || given; // allow {answers:{...}} or flat
   const qs = buildQuestions();
+  // Footgun guard: `generate --n K` then `check` (default --n 12) compares against
+  // a DIFFERENT question set. If the answer count doesn't match the quiz size at
+  // this --n/--seed, say so loudly instead of silently scoring unseen questions.
+  const answeredCount = Object.keys(ansMap).filter((k) => /^q\d+$/.test(k)).length;
+  if (answeredCount !== qs.length) {
+    console.log(`⚠ mismatch: you answered ${answeredCount} question(s) but this quiz has ${qs.length} at --seed ${SEED} --n ${N}.`);
+    console.log(`  Pass the SAME --n to generate and check (you likely generated with --n ${answeredCount}).\n`);
+  }
   let correct = 0;
   const results = [];
   for (const q of qs) {
