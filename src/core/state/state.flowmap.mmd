@@ -63,6 +63,19 @@ flowchart LR
 %% fm:meta nodeCenter i0.accepts=n: DiagramNode
 %% fm:meta nodeCenter i0.returns={ cx: number; cy: number }
 
+%% src frameTransform src/core/state/state.ts#frameTransform
+%% kind frameTransform function
+%% fm:meta frameTransform name=frameTransform
+%% fm:meta frameTransform desc=pure camera transform: centre a node in the viewport at a readable, clamped zoom
+%% fm:meta frameTransform i0.name=frameTransform
+%% fm:meta frameTransform i0.accepts=n: DiagramNode
+%% fm:meta frameTransform i0.accepts=vw: number
+%% fm:meta frameTransform i0.accepts=vh: number
+%% fm:meta frameTransform i0.accepts=wantZ: number
+%% fm:meta frameTransform i0.accepts=zMin: number
+%% fm:meta frameTransform i0.accepts=zMax: number
+%% fm:meta frameTransform i0.returns={ x: number; y: number; z: number }
+
 %% src bestSides src/core/state/state.ts#bestSides
 %% kind bestSides function
 %% fm:meta bestSides name=bestSides
@@ -189,6 +202,7 @@ flowchart LR
     snapV("snapV")
     portPos("portPos")
     nodeCenter("nodeCenter")
+    frameTransform("frameTransform")
     bestSides("bestSides")
     nodeAtPoint("nodeAtPoint")
   end
@@ -208,6 +222,7 @@ flowchart LR
   end
 
   bestSides --> nodeCenter
+  frameTransform --> nodeCenter
   nodeAtPoint --> containerOf
   childIdsOf --> containerOf
   containerPath --> containerOf

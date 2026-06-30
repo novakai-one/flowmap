@@ -43,29 +43,34 @@ against a map that hid `zoomToNode`. Decide evolve-vs-add at review before imple
 completeness-gated — only top-level exports are (A1). A cross-module-called API method hid in the
 map for many commits. Candidate roadmap item: extend the completeness gate to API-surface members.
 
-## 1a. Gap-1 load-test — first behavioural contract authored (NOT implemented)
+## 1a. Gap-1 CLOSED — first behavioural contract authored AND implemented
 
-Authored a real Keystone-2 contract for the reconciled `frame-node` and ran it through the gates.
-Stopped at the implement boundary — no app code written. Each row is runnable.
+The design→contract→implement→test half of the loop now closes on a real change: `state.frameTransform`
+(the pure, testable core of `frame-node`). Each row is runnable.
 
 | What | Verify it yourself | Expect |
 |---|---|---|
-| Plan now carries a real signature (was 0/16) | `node tools/flowmap/plan-cert.mjs --plan public/plan.json` | CERTIFIED · "1 carry a proposed signature" |
-| The behavioural contract BITES (red until implemented) | `npm run flowmap:acceptance -- --plan public/plan.json` | 0/3 green · "no %% src mapping … not implemented" |
-| The testable core is a pure fn (`state.frameTransform`) | `grep -n '"frame-transform"' public/plan.json` | the change + `fm` + `acceptance.cases` |
-| Plan still coherent + approval export builds | `npm run flowmap:plan-check -- --plan public/plan.json` | coherent (17 changes) |
+| Pure testable core implemented | `grep -n "export function frameTransform" src/core/state/state.ts` | present (6-line pure fn) |
+| Behavioural contract GREEN (was red pre-impl) | `npm run flowmap:acceptance -- --plan public/plan.json` | 3/3 green · "the change is DONE (shaped AND correct)" |
+| Map in sync (signature gate) | `npm run flowmap:gate` | `state__frameTransform` signature matches code |
+| Change reads BUILT | `npm run flowmap:status -- --plan public/plan.json` | `frame-transform [BUILT]` (modify) · 9 built · 8 pending |
+| Plan coherent + cert green + full suite green | `npm run flowmap:plan-check -- --plan public/plan.json` · `npm run spec:test:all` | coherent (17) · 101/101 |
 
-**To finish the closure (implement step, held for your review):** implement
-`state.frameTransform(n, vw, vh, wantZ, zMin, zMax) -> {x,y,z}` (centre via `nodeCenter`, clamp z to
-[zMin,zMax]); ship the map; then `flowmap:acceptance` flips **3/3 green** and `flowmap:status` flips
-`frame-transform` to BUILT — the first proof the design→contract→implement→test half of the loop
-closes on a real change.
+**Lifecycle finding (new gap):** an `add` change, once implemented + shipped into the map, becomes
+INCOHERENT against REAL-IDS ("adds a node that already exists"). The loop has no automatic
+"change-landed" transition — `frame-transform` had to be hand-flipped `add`→`modify` to keep
+plan-check / loop-e2e green. Candidate roadmap item: a built-add → modify/`done` transition so the
+plan artifact doesn't self-drift the moment an add lands.
 
-**New gap found this step:** the Keystone-2 harness (`acceptance.mjs`) only tests PURE, top-level
-EXPORTED functions (`mod[symbol](...args)` + deepStrictEqual). DOM/ctx-bound API methods and new UI
-modules — most of the app, incl. every other pending change — cannot carry a behavioural contract
-directly; their logic must be factored to pure functions first. Candidate roadmap item: a ctx/DOM
-acceptance harness, or a documented "factor-to-pure" contracting rule.
+**Open gap (E2 surface):** the Keystone-2 harness (`acceptance.mjs`) only tests PURE, top-level
+EXPORTED functions (`mod[symbol](...args)` + deepStrictEqual). DOM/ctx-bound methods and new UI
+modules — most of the app, incl. every other pending change — must be factored to pure functions to
+be behaviourally contractable (this is why `frame-node`'s core became `state.frameTransform`).
+Candidate roadmap item: a ctx/DOM acceptance harness, or a documented "factor-to-pure" rule.
+
+**Still held for your review (the camera applier):** `frame-node` (add `camera__frameNode`) remains
+PENDING — it is the thin DOM applier over `frameTransform`, and its evolve-vs-add reconciliation
+against the existing `camera.zoomToNode` (navigator.ts:124) is a design decision left to review.
 
 ## 1·prev. Prior session — each row is a runnable claim
 

@@ -33,10 +33,9 @@
     },
     {
       "id": "frame-transform",
-      "status": "add",
+      "status": "modify",
       "target": { "kind": "node", "ref": "state__frameTransform" },
       "phase": 1, "risk": "low",
-      "newNode": { "label": "frameTransform", "kind": "function", "parent": "state" },
       "intent": {
         "problem": "frame-node's value is behavioural (centre AND zoom to a readable, clamped floor), but a void DOM camera method cannot carry a Keystone-2 acceptance contract — E2 only tests pure exported functions",
         "approach": "extract the testable core as a pure function in state.ts: node + viewport + desired zoom -> {x,y,z}, clamped to [zMin,zMax]; mirrors how camera already consumes nodeCenter/levelFitBounds",

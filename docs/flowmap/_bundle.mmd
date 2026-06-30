@@ -387,6 +387,16 @@ flowchart LR
 %% fm:meta state__nodeCenter i0.name=nodeCenter
 %% fm:meta state__nodeCenter i0.accepts=n: DiagramNode
 %% fm:meta state__nodeCenter i0.returns={ cx: number; cy: number }
+%% fm:meta state__frameTransform name=frameTransform
+%% fm:meta state__frameTransform desc=pure camera transform: centre a node in the viewport at a readable, clamped zoom
+%% fm:meta state__frameTransform i0.name=frameTransform
+%% fm:meta state__frameTransform i0.accepts=n: DiagramNode
+%% fm:meta state__frameTransform i0.accepts=vw: number
+%% fm:meta state__frameTransform i0.accepts=vh: number
+%% fm:meta state__frameTransform i0.accepts=wantZ: number
+%% fm:meta state__frameTransform i0.accepts=zMin: number
+%% fm:meta state__frameTransform i0.accepts=zMax: number
+%% fm:meta state__frameTransform i0.returns={ x: number; y: number; z: number }
 %% fm:meta state__bestSides name=bestSides
 %% fm:meta state__bestSides desc=pick the nearest facing port sides for an edge between two nodes
 %% fm:meta state__bestSides i0.name=bestSides
@@ -1581,6 +1591,7 @@ flowchart LR
 %% kind state__snapV function
 %% kind state__portPos function
 %% kind state__nodeCenter function
+%% kind state__frameTransform function
 %% kind state__bestSides function
 %% kind state__nodeAtPoint function
 %% kind state__containerOf function
@@ -2006,6 +2017,7 @@ flowchart LR
 %% src state__snapV src/core/state/state.ts#snapV
 %% src state__portPos src/core/state/state.ts#portPos
 %% src state__nodeCenter src/core/state/state.ts#nodeCenter
+%% src state__frameTransform src/core/state/state.ts#frameTransform
 %% src state__bestSides src/core/state/state.ts#bestSides
 %% src state__nodeAtPoint src/core/state/state.ts#nodeAtPoint
 %% src state__containerOf src/core/state/state.ts#containerOf
@@ -2416,6 +2428,7 @@ flowchart LR
     state__snapV("snapV")
     state__portPos("portPos")
     state__nodeCenter("nodeCenter")
+    state__frameTransform("frameTransform")
     state__bestSides("bestSides")
     state__nodeAtPoint("nodeAtPoint")
   end
@@ -2967,6 +2980,7 @@ flowchart LR
   plan__planFromDiff --> plan__applyPlan
   runtime__createRuntime -.->|returns| runtime__Runtime
   state__bestSides --> state__nodeCenter
+  state__frameTransform --> state__nodeCenter
   state__nodeAtPoint --> state__containerOf
   state__childIdsOf --> state__containerOf
   state__containerPath --> state__containerOf

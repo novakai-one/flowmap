@@ -99,6 +99,19 @@ export function nodeCenter(n: DiagramNode): { cx: number; cy: number } {
   return { cx: n.x + n.w / 2, cy: n.y + n.h / 2 };
 }
 
+/**
+ * Pure camera transform: centre node `n` in a vw×vh viewport at a readable zoom
+ * `wantZ`, clamped to [zMin, zMax]. Returns the camera {x, y, z} a frame action
+ * should apply. The DOM-mutating camera method is a thin applier over this.
+ */
+export function frameTransform(
+  n: DiagramNode, vw: number, vh: number, wantZ: number, zMin: number, zMax: number,
+): { x: number; y: number; z: number } {
+  const z = Math.min(zMax, Math.max(zMin, wantZ));
+  const { cx, cy } = nodeCenter(n);
+  return { x: vw / 2 - cx * z, y: vh / 2 - cy * z, z };
+}
+
 /** Pick the nearest facing port sides for an edge between two nodes. */
 export function bestSides(a: DiagramNode, b: DiagramNode): [PortSide, PortSide] {
   const ca = nodeCenter(a), cb = nodeCenter(b);
