@@ -36,7 +36,48 @@ loop documented below. The full, command-anchored handoff lives in `sandbox/READ
 | Tooling still green (sandbox is outside `src/`) | `npm run flowmap:gate` · `npm run flowmap:exports` · `npm run flowmap:coverage` | in sync · PASS · PASS |
 | Next increment (design intent) | `sed -n '/Known limit/,$p' sandbox/README.md` | drive the real `render`/`wires` via a minimal `AppContext` → audits as overlays on the actual canvas |
 
-## 1·now. Phase H — the two-contract gap closure (purpose review → built)
+## 1·now. Tooling self-map (Phase I) — the map now documents its own generator
+
+The map covered `src/` only; the ~32 load-bearing `.mjs` modules that RUN the loop (onboard, gate,
+contract, waves, orchestrate…) were invisible to it. They now have their own flowmap —
+`docs/flowmap/_tooling.mmd`, a **sibling bundle** kept out of the ts-morph `src` gate — proven
+true + complete + architectural + deterministic by machine. Each row is runnable.
+
+| What | Verify it yourself | Expect |
+|---|---|---|
+| Tooling map bundles + valid + architectural + complete + deterministic | `npm run flowmap:tooling:verify` | DONE line · lint PASS · all 32 modules mapped · 5/5 tests |
+| Every load-bearing `tools/` module is mapped or audited-excluded (no silent gap) | `npm run flowmap:tooling:coverage` | PASS — 32 modules mapped, 32 %% src resolve |
+| It is architecture altitude, not a flat file-mirror | `node tools/flowmap/flowmap-lint.mjs docs/flowmap/_tooling.mmd` | RESULT: PASS (0 warnings) |
+| Exclusions are audited, not silent | `cat docs/flowmap/tooling-curation-allowlist.txt` | 5 entries (scratch / harness / contract-instrument), each with a reason |
+| The committed map is fresh (re-bundle is byte-identical) | `npm run flowmap:tooling:bundle && git status --short docs/flowmap/_tooling.mmd` | clean (no diff) |
+| Phase I computes BUILT (status, not prose) | `npm run flowmap:roadmap` | `I1 [BUILT]` (5/5) · 32 built |
+| The `src` map + whole suite still green (the tooling map is a sibling) | `npm run flowmap:verify` · `npm run spec:test:all` | 0 unaccounted edges · 158/158 |
+| Review overlay that authored this (viewable in the editor) | `npm run flowmap:plan-check -- --plan docs/flowmap/plans/tooling.plan.json` | coherent (103 changes) |
+
+**How it was built (the flowmap way):** 6 subsystem fragments (`tools/**/<subsystem>.flowmap.mmd`)
+authored by 6 subagents, each under an enforceable, self-verifiable contract —
+`node tools/flowmap/frag-check.mjs <fragment> --container <id> --expect <ids>` must exit 0 — then
+gated centrally by `flowmap:tooling:verify`. No subagent output was accepted on prose; only the checks.
+
+**New files:** `docs/flowmap/root-tools.mmd`, `docs/flowmap/_tooling.mmd`,
+`docs/flowmap/tooling-curation-allowlist.txt`, `docs/flowmap/plans/tooling.plan.json`,
+`tools/flowmap/{tooling-coverage,frag-check,tooling-map.test}.mjs`, and 6 fragments
+(`tools/buildspec/buildspec.flowmap.mmd`, `tools/flowmap/{integrity,understand,continuity,plan-approve,contract-spine}.flowmap.mmd`).
+**Edited:** `package.json` (scripts + suite), `docs/flowmap/roadmap.json` (Phase I), `CLAUDE.md` (I1 def).
+
+**Honest boundaries (do not oversell):**
+- **Structure-only.** `.mjs` carries no `fm` signature and is NOT gated by `flowmap:gate` (ts-morph
+  `allowJs:false`). The tooling map's truth is `flowmap:tooling:verify` (grammar + lint + completeness
+  + symbol-truth + determinism) plus the modules' own `node --test` suites — not signature-level like
+  the `src` gate.
+- **Completeness is module-level, not symbol-level.** Every tooling *file* is a node; a tool's
+  individual exported functions are not each gated the way `src` exports are (A1). Extending
+  symbol-level completeness to `.mjs` is a candidate follow-on (captured only here + as this bullet).
+- **Separate bundle.** `flowmap:onboard` / `flowmap:ship` still operate on `_bundle.mmd` (the app).
+  The tooling map is enforced by `flowmap:tooling:verify`, which runs inside `spec:test:all` (so CI
+  covers it via `tooling-map.test.mjs`).
+
+## 1·recent. Phase H — the two-contract gap closure (purpose review → built)
 
 A purpose review found the AI↔human↔AI and AI↔subagent contracts were *demonstrable* but not yet
 *load-bearing*; five seams. Phase H closes them. Tooling-track items are verified by their own
@@ -50,8 +91,8 @@ A purpose review found the AI↔human↔AI and AI↔subagent contracts were *dem
 | **H4 — orchestrator + worktree isolation**: waves → per-change worktree+contract → strict verdict → canonical summary | `node tools/flowmap/orchestrate.mjs --plan public/plan.json` · `node --test tools/flowmap/orchestrate.test.mjs` | wave-0 dispatch + summary (exit 1 = unbuilt, expected) · 6/6 |
 | H4 determinism (worktree side-effects must not perturb stdout) | `node tools/flowmap/replay.mjs --task "node tools/flowmap/orchestrate.mjs --plan public/plan.json --json" --n 5` | `DETERMINISTIC` · one hash |
 | **H5 — handoff content-falsifiability**: a handoff that misstates a file's git state fails the gate | `node --test tools/flowmap/handoff-fresh.test.mjs` | 5/5 (incl. the real two-bullet pattern + no false positive) |
-| Phase H computes BUILT (status, not prose) | `npm run flowmap:roadmap` | H1–H5 `[BUILT]` · 31 built |
-| Plan coherent + certified; whole suite green; map in sync | `npm run flowmap:plan-check -- --plan docs/flowmap/plans/phase-h.plan.json` · `npm run spec:test:all` · `npm run flowmap:gate` | coherent · 153/153 · in sync |
+| Phase H computes BUILT (status, not prose) | `npm run flowmap:roadmap` | H1–H5 `[BUILT]` · 32 built |
+| Plan coherent + certified; whole suite green; map in sync | `npm run flowmap:plan-check -- --plan docs/flowmap/plans/phase-h.plan.json` · `npm run spec:test:all` · `npm run flowmap:gate` | coherent · 158/158 · in sync |
 
 **Plan + machine-checked intent** (coherence proven by `npm run flowmap:plan-check -- --plan
 docs/flowmap/plans/phase-h.plan.json`): `docs/flowmap/plans/phase-h.plan.json`.
@@ -72,7 +113,7 @@ docs/flowmap/plans/phase-h.plan.json`): `docs/flowmap/plans/phase-h.plan.json`.
   and by running `checkContentClaims` on this file's own HEAD revision (it flagged the prior
   false Phase-G claim, which is now removed). Commit state is derivable from `git status`.
 
-## 1·recent. Phase G — the agent/subagent contract spine (route, not compute)
+## 1·earlier. Phase G — the agent/subagent contract spine (route, not compute)
 
 Built the tooling that makes subagent execution verifiable with **zero prose in the verdict or
 handover**: a 0-context subagent receives a deterministic *contract packet*, returns a tool-computed
@@ -91,7 +132,7 @@ Each row is runnable.
 | **G4 — spawn-gate** enforces the contract, fails open | `node --test tools/flowmap/contract-gate.test.mjs` · `grep -n contract-gate .claude/settings.json` | 6/6 · `PreToolUse` hook wired |
 | **G5 — parallel execution scheduler**: deterministic topological waves from deps + live status | `npm run flowmap:waves -- --plan public/plan.json` | `wave 0 (ready now): …` dispatchable set · later waves unlock as deps land |
 | G5 — the waves output is deterministic (100→100) | `npm run flowmap:replay -- --task "node tools/flowmap/waves.mjs --plan public/plan.json --json" --n 12` | `DETERMINISTIC` · one hash · exit 0 |
-| Phase G computes BUILT (status, not prose) | `npm run flowmap:roadmap` | G1–G5 `[BUILT]` · 26 built |
+| Phase G computes BUILT (status, not prose) | `npm run flowmap:roadmap` | G1–G5 `[BUILT]` · 32 built |
 | **E4 gap fixed** — acceptance now runs on the REAL plan in CI (was engine-test only) | `grep -n "flowmap:acceptance -- --plan" .github/workflows/spec-gate.yml` | present in buildspec-tests |
 | Map still true+complete (tooling lives outside src/) · whole suite green | `npm run flowmap:verify` · `npm run spec:test:all` | green · all pass |
 
@@ -129,7 +170,7 @@ Resumed the in-flight plan (`public/plan.json`). Before implementing, found and 
 | What | Verify it yourself | Expect |
 |---|---|---|
 | **Map was incomplete:** `camera.zoomToNode` existed in code + was called cross-module, but was absent from the map. Now documented. | `grep -n camera__zoomToNode docs/flowmap/_bundle.mmd` | node present (kind/sig/src + `--> applyCam` edge) |
-| Fixed map is true + complete + in sync | `npm run flowmap:ship` | DONE line · gate in sync · 0 unaccounted edges (284) |
+| Fixed map is true + complete + in sync | `npm run flowmap:ship` | DONE line · gate in sync · 0 unaccounted edges (285) |
 | `zoomToNode` is a real cross-module call, not dead code | `grep -n "camera.zoomToNode" src/panel/navigator.ts` | navigator.ts:124 |
 | In-flight plan state (unchanged by the fix — `frameNode` still absent) | `npm run flowmap:status -- --plan public/plan.json` | 8 built · 8 pending |
 | Plan is certified but **awaits human review** — 0 changes carry a signature | `node tools/flowmap/plan-cert.mjs --plan public/plan.json` | CERTIFIED · "Safe to send to human review" |
@@ -155,7 +196,7 @@ The design→contract→implement→test half of the loop now closes on a real c
 | Behavioural contract GREEN (was red pre-impl) | `npm run flowmap:acceptance -- --plan public/plan.json` | 3/3 green · "the change is DONE (shaped AND correct)" |
 | Map in sync (signature gate) | `npm run flowmap:gate` | `state__frameTransform` signature matches code |
 | Change reads BUILT | `npm run flowmap:status -- --plan public/plan.json` | `frame-transform [BUILT]` (modify) · 9 built · 8 pending |
-| Plan coherent + cert green + full suite green | `npm run flowmap:plan-check -- --plan public/plan.json` · `npm run spec:test:all` | coherent (17) · 101/101 |
+| Plan coherent + cert green + full suite green | `npm run flowmap:plan-check -- --plan public/plan.json` · `npm run spec:test:all` | coherent (17) · 158/158 |
 
 **Lifecycle finding (new gap):** an `add` change, once implemented + shipped into the map, becomes
 INCOHERENT against REAL-IDS ("adds a node that already exists"). The loop has no automatic
@@ -181,7 +222,7 @@ and the unenforced *agent* protocol. The loop is now closed at the meta level to
 
 | What | Verify it yourself | Expect |
 |---|---|---|
-| **A5 — edge verification.** The whole call graph was UNVERIFIED (283 edges, warnings only) — yet blast-radius / `downstreamCone` all walk it. Now every edge is code-backed or audited. | `npm run flowmap:edges` | 279 code-backed · 4 advisory · **0 unaccounted** |
+| **A5 — edge verification.** The whole call graph was UNVERIFIED (283 edges, warnings only) — yet blast-radius / `downstreamCone` all walk it. Now every edge is code-backed or audited. | `npm run flowmap:edges` | 281 code-backed · 4 advisory · **0 unaccounted** |
 | A5 fails closed | `node --test tools/flowmap/edge-verify.test.mjs` | 5/5 (strict exits 1 on an unaccounted edge) |
 | A5 advisory edges are audited, not hidden | `cat docs/flowmap/edge-advisory-allowlist.txt` | 4 `ctx.hooks` edges, each with rationale |
 | **A6 — type gate tightened.** Object-literal + function types now compared, not skipped as prose. | `npm run flowmap:gate` | ✓ in sync · **1** prose hole (was 32) |
@@ -192,8 +233,8 @@ and the unenforced *agent* protocol. The loop is now closed at the meta level to
 | **F4 — meta-loop is verifiable.** Handoff must be ≥ as fresh as the last code commit. | `npm run flowmap:handoff:check` | ✓ (exits 1 when the handoff lags code) |
 | **F5 — the loop runs end-to-end** (plan-check → cert → approve → status → writeback → edges) on the real plan, as one chain. | `npm run flowmap:loop` | 1/1 |
 | **trust report reflects A5/A6** | `npm run flowmap:trust` | ~2526 verified · 32 partial · 0 unverified edges |
-| Whole computed roadmap | `npm run flowmap:roadmap` | 21 built (Phase A–F) |
-| Nothing regressed | `npm run spec:test:all` · `npm run typecheck` | 101/101 · clean |
+| Whole computed roadmap | `npm run flowmap:roadmap` | 32 built (Phase A–I) |
+| Nothing regressed | `npm run spec:test:all` · `npm run typecheck` | 158/158 · clean |
 
 New files: `tools/flowmap/{edge-verify,plan-check,approve-export,handoff-fresh,loop-e2e.test,edge-verify.test,plan-check.test,approve-export.test}.mjs`,
 `tools/buildspec/normtype.test.mjs`, `docs/flowmap/edge-advisory-allowlist.txt`, `.claude/settings.json`.
