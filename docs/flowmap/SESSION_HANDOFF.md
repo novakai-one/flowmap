@@ -20,7 +20,24 @@ npm run flowmap:quiz -- generate --n 12 --seed 1
 npm run flowmap:quiz -- check --answers answers.json --seed 1   # 100% = handover trusted
 ```
 
-## 0a. This session — `sandbox/unfold` rebuilt as the opt-in *understanding surface* (outside `src/`)
+## 0a. This session — the unfold direction is COMMITTED: legacy frozen, reading mode landed in the app
+
+The human committed to the unfold direction as the app's UI direction. Three deliverables, each runnable:
+
+| What | Verify it yourself | Expect |
+|---|---|---|
+| **Legacy preserved** — the pre-unfold editor frozen as a BUILT snapshot (immune to src/ changes) | `cat sandbox/legacy/README.md` · `git tag -l legacy-editor` · open `/sandbox/legacy/` on the dev server | README with source commit · tag exists · old editor boots |
+| **Reading mode landed in `src/`** — `initUnfold` (planner isolation pattern): full-screen folded view of ctx.state, 7 opt-in layers, browse tree, inspector with ctx.bodies source | `grep -n "initUnfold" src/main.ts` · `npm run flowmap:gate` · open `/` → **Read** button | wired in composition root · in sync (unfold in `_bundle.mmd`) · 465-node map arrives as 40 folded cards |
+| Map true+complete with the new module | `npm run flowmap:ship` · `npm run spec:test:all` | DONE line (475 nodes · 293 edges, 0 unaccounted) · 158/158 |
+| **The migration is a plan, not prose** — remaining feature-wiring enumerated as falsifiable adds | `npm run flowmap:plan-check -- --plan docs/flowmap/plans/unfold-integration.plan.json` · `npm run flowmap:status -- --plan docs/flowmap/plans/unfold-integration.plan.json` | coherent (8 changes) · **8 pending** — the build checklist for the next sessions |
+
+**Where to resume (Scenario 1):** `npm run flowmap:status -- --plan docs/flowmap/plans/unfold-integration.plan.json`.
+Phase 1 (`read-sel-sync`, `read-persist-view`) is low-risk and unblocks phase 2; `read-review-overlay`
+and `grouping-directive` are flagged design-review-first in their intents. A change reads BUILT only
+when its keystone symbol exists in code and the map — structure-only modifies were deliberately
+avoided because they read BUILT while unbuilt (shape ≠ intent).
+
+## 0a·prev. Earlier today — `sandbox/unfold` rebuilt as the opt-in *understanding surface* (outside `src/`)
 
 The "folded organism" prototype (`sandbox/unfold/`) was rebuilt to match the stated vision: zero
 titles/narration on the surface, the app's **own parser** instead of a hand-rolled one, and a wider

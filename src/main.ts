@@ -48,6 +48,7 @@ import { initNavigator } from './panel/navigator';
 import { initSlice } from './panel/slice';
 import { initPlanner } from './panel/planner';
 import { initTabs } from './panel/tabs';
+import { initUnfold } from './panel/unfold';
 
 import { initMermaid } from './io/mermaid';
 import { initLayout } from './io/layout';
@@ -114,6 +115,7 @@ const view = initView(ctx, camera);
 const navigatorMod = initNavigator(ctx, { selection, view, camera });
 const sliceMod = initSlice(ctx, { mermaid });
 const planner = initPlanner(ctx, { mermaid });
+const unfold = initUnfold(ctx);
 const contextMenu = initContextMenu(ctx, { camera, selection, nodes, clipboard, inlineEdit, view });
 
 initKeyboard(ctx, {
@@ -178,6 +180,7 @@ $('saveBtn').onclick = files.saveMmd;
 // opens it for an authored plan.json. Both flow through the same review path.
 $('diffBtn').onclick = planner.openProposal;
 $('plannerBtn').onclick = planner.open;
+$('readBtn').onclick = unfold.toggle;
 
 $('zIn').onclick = () => camera.zoomCenter(ctx.cam.z * 1.2);
 $('zOut').onclick = () => camera.zoomCenter(ctx.cam.z / 1.2);

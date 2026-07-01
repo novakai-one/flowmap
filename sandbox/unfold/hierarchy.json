@@ -13,7 +13,8 @@
             "Layout & routing": ["layout", "avoidRouter", "avoidWorker"],
             "Direct manipulation": ["pointer", "nodes", "selection", "clipboard", "inlineEdit", "keyboard", "contextMenu", "view"]
           },
-          "Side panels": ["inspector", "inspectorFrontmatter", "tabs", "styleControls", "navigator", "slice"]
+          "Side panels": ["inspector", "inspectorFrontmatter", "tabs", "styleControls", "navigator", "slice"],
+          "Reading mode": ["unfold"]
         },
         "Domain model": {
           "Core model & config": ["state", "types", "config", "runtime"],

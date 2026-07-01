@@ -1216,6 +1216,33 @@ flowchart LR
 %% fm:meta theming__applyCanvasPrefs desc=apply grid, snap, minimap and card width prefs, then refresh the camera
 %% fm:meta theming__applyCanvasPrefs i0.name=applyCanvasPrefs
 %% fm:meta theming__applyCanvasPrefs i0.returns=void
+%% fm:meta unfold__UnfoldApi name=UnfoldApi
+%% fm:meta unfold__UnfoldApi desc=public surface: open, close, toggle
+%% fm:meta unfold__initUnfold name=initUnfold
+%% fm:meta unfold__initUnfold desc=build the reading-mode overlay (own DOM + own CSS, the planner isolation pattern) bound to ctx; reads ctx.state + ctx.bodies, writes nothing
+%% fm:meta unfold__initUnfold i0.name=initUnfold
+%% fm:meta unfold__initUnfold i0.accepts=ctx: AppContext
+%% fm:meta unfold__initUnfold i0.returns=UnfoldApi
+%% fm:meta unfold__ufBuild name=build
+%% fm:meta unfold__ufBuild desc=derive the folded units from ctx.state on every open: live parent wins, else the flowmap mod__rest drill convention; de-dup edges, fan-in
+%% fm:meta unfold__ufBuild i0.name=build
+%% fm:meta unfold__ufBuild i0.returns=void
+%% fm:meta unfold__ufRenderCanvas name=renderCanvas
+%% fm:meta unfold__ufRenderCanvas desc=render the containment roots as nested flex cards/groups; only expanded containers show their children
+%% fm:meta unfold__ufRenderCanvas i0.name=renderCanvas
+%% fm:meta unfold__ufRenderCanvas i0.returns=void
+%% fm:meta unfold__ufDrawWires name=drawWires
+%% fm:meta unfold__ufDrawWires desc=orthogonal wires aggregated to the visible representatives, gated by the calls/deps layers, painted above the group surfaces
+%% fm:meta unfold__ufDrawWires i0.name=drawWires
+%% fm:meta unfold__ufDrawWires i0.returns=void
+%% fm:meta unfold__ufComputeBlast name=computeBlast
+%% fm:meta unfold__ufComputeBlast desc=reverse-BFS the transitive dependents of the selection and map them to visible cards with min hop distance
+%% fm:meta unfold__ufComputeBlast i0.name=computeBlast
+%% fm:meta unfold__ufComputeBlast i0.returns=void
+%% fm:meta unfold__ufRenderInspector name=renderInspector
+%% fm:meta unfold__ufRenderInspector desc=empty until selection; then kind, crumbs, desc, interfaces, blast count, connections, and the real source body from ctx.bodies
+%% fm:meta unfold__ufRenderInspector i0.name=renderInspector
+%% fm:meta unfold__ufRenderInspector i0.returns=void
 %% fm:meta avoidRouter__RouteOptions name=RouteOptions
 %% fm:meta avoidRouter__RouteOptions desc=options for routeReferences: optional onlyEdgeIds to route a subset
 %% fm:meta avoidRouter__routeReferences name=routeReferences
@@ -1492,6 +1519,7 @@ flowchart LR
 %% kind diffWorkspace module
 %% kind plan module
 %% kind planner module
+%% kind unfold module
 %% kind camera__CameraApi type
 %% kind camera__initCamera function
 %% kind camera__applyCam function
@@ -1772,6 +1800,13 @@ flowchart LR
 %% kind theming__applyTheme function
 %% kind theming__applyFont function
 %% kind theming__applyCanvasPrefs function
+%% kind unfold__UnfoldApi type
+%% kind unfold__initUnfold function
+%% kind unfold__ufBuild function
+%% kind unfold__ufRenderCanvas function
+%% kind unfold__ufDrawWires function
+%% kind unfold__ufComputeBlast function
+%% kind unfold__ufRenderInspector function
 %% kind avoidRouter__RouteOptions type
 %% kind avoidRouter__routeReferences function
 %% kind avoidRouter__routeFor function
@@ -1903,6 +1938,8 @@ flowchart LR
 %% parent tabs__tb_ui tabs
 %% parent theming__th_api theming
 %% parent theming__th_apply theming
+%% parent unfold__uf_api unfold
+%% parent unfold__uf_view unfold
 %% parent avoidRouter__ar_api avoidRouter
 %% parent avoidRouter__ar_obstacles avoidRouter
 %% parent avoidRouter__ar_worker avoidRouter
@@ -2186,6 +2223,13 @@ flowchart LR
 %% src theming__applyTheme src/panel/theming.ts#applyTheme
 %% src theming__applyFont src/panel/theming.ts#applyFont
 %% src theming__applyCanvasPrefs src/panel/theming.ts#applyCanvasPrefs
+%% src unfold__UnfoldApi src/panel/unfold.ts#UnfoldApi
+%% src unfold__initUnfold src/panel/unfold.ts#initUnfold
+%% src unfold__ufBuild src/panel/unfold.ts#build
+%% src unfold__ufRenderCanvas src/panel/unfold.ts#renderCanvas
+%% src unfold__ufDrawWires src/panel/unfold.ts#drawWires
+%% src unfold__ufComputeBlast src/panel/unfold.ts#computeBlast
+%% src unfold__ufRenderInspector src/panel/unfold.ts#renderInspector
 %% src avoidRouter__RouteOptions src/render/avoidRouter.ts#RouteOptions
 %% src avoidRouter__routeReferences src/render/avoidRouter.ts#routeReferences
 %% src avoidRouter__routeFor src/render/avoidRouter.ts#routeFor
@@ -2272,6 +2316,7 @@ flowchart LR
   diffWorkspace["diffWorkspace"]
   plan["plan"]
   planner["planner"]
+  unfold["unfold"]
 
   subgraph camera__c_api ["API + factory"]
     camera__CameraApi>"CameraApi"]
@@ -2756,6 +2801,18 @@ flowchart LR
     theming__applyCanvasPrefs("applyCanvasPrefs")
   end
 
+  subgraph unfold__uf_api ["Public API"]
+    unfold__initUnfold("initUnfold")
+    unfold__UnfoldApi>"UnfoldApi"]
+  end
+  subgraph unfold__uf_view ["Folded view"]
+    unfold__ufBuild("build")
+    unfold__ufRenderCanvas("renderCanvas")
+    unfold__ufDrawWires("drawWires")
+    unfold__ufComputeBlast("computeBlast")
+    unfold__ufRenderInspector("renderInspector")
+  end
+
   subgraph avoidRouter__ar_api ["Public API"]
     avoidRouter__RouteOptions>"RouteOptions"]
     avoidRouter__routeReferences("routeReferences")
@@ -2923,9 +2980,11 @@ flowchart LR
   slice -.->|fromMermaid| mermaid
   slice -.->|sliceIds, sliceStubs| state
   main -->|30 planner| planner
+  main -->|31 unfold| unfold
   plan -.->|types| types
   planner -.->|childIdsOf, containerOf| state
   planner -.->|plan overlay| plan
+  unfold -.->|esc| config
   camera__zoomCenter --> camera__zoomAt
   camera__zoomAt --> camera__applyCam
   camera__zoomToFit --> camera__applyCam
@@ -3085,6 +3144,12 @@ flowchart LR
   slice__initSlice --> slice__renderSlice
   tabs__initTabs -.->|returns| tabs__TabsApi
   theming__initTheming -.->|returns| theming__ThemingApi
+  unfold__initUnfold -.->|returns| unfold__UnfoldApi
+  unfold__initUnfold --> unfold__ufBuild
+  unfold__initUnfold --> unfold__ufRenderCanvas
+  unfold__ufRenderCanvas --> unfold__ufDrawWires
+  unfold__initUnfold --> unfold__ufComputeBlast
+  unfold__initUnfold --> unfold__ufRenderInspector
   avoidRouter__ensureRoutes --> avoidRouter__routeReferences
   avoidRouter__routeReferences --> avoidRouter__routableEdges
   avoidRouter__routeReferences --> avoidRouter__footprintRect

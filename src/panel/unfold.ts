@@ -1,0 +1,802 @@
+/* =====================================================================
+   unfold.ts — reading mode: the folded map you open only where you look
+   ---------------------------------------------------------------------
+   Responsibility: render ctx.state as ONE folded organism (full-screen
+   overlay). Arrival shows only the containment roots; everything else is
+   revealed by the reader — unfold in place, plus opt-in layers (call and
+   dependency wires, descriptions, interfaces, metrics, colour, blast
+   radius), a checkable browse tree, and an inspector that is empty until
+   something is selected (source bodies come from ctx.bodies when loaded).
+   The surface itself carries no titles and no narration by design: the
+   summary forms in the reader's head, not on the screen.
+
+   Isolation (the planner.ts pattern): builds its OWN overlay DOM and
+   injects its OWN CSS. The only edits outside this file are one toolbar
+   button in index.html and two lines in main.ts. Reads ctx.state +
+   ctx.bodies; writes NOTHING to the model.
+
+   Containment: a node's live `parent` wins; otherwise the flowmap drill
+   convention applies — an id `mod__rest` folds under node `mod` when that
+   node exists. Generic diagrams fold by their real containment only.
+   ===================================================================== */
+
+import type { AppContext } from '../core/context/context';
+import type { DiagramNode } from '../core/types/types';
+import { esc } from '../core/config/config';
+
+export interface UnfoldApi {
+  open: () => void;
+  close: () => void;
+  toggle: () => void;
+}
+
+/* ---- folded-view unit (derived from ctx.state on every open) ---- */
+interface UNode {
+  id: string;
+  label: string;
+  kind: string;            // semantic kind, or 'group' for containers without one
+  desc: string;
+  accepts: string[];
+  returns: string[];
+  state: string[];
+  children: string[];
+  parent: string | null;
+  fanIn: number;
+}
+interface UEdge { from: string; to: string; label: string; call: boolean; dep: boolean; w: number }
+interface Box { x: number; y: number; w: number; h: number; cx: number; cy: number }
+
+const NS = 'http://www.w3.org/2000/svg';
+const SYM_KINDS = new Set(['type', 'function', 'class', 'store', 'hook', 'service', 'event', 'component']);
+
+const CSS = `
+.uf-overlay{position:fixed;inset:0;z-index:70;display:none;
+  --uf-bg:#f3f1ec;--uf-stage:#f6f4ef;--uf-surface:#ffffff;--uf-surface2:#faf8f3;
+  --uf-line:#e6e2d9;--uf-line-soft:#efece4;--uf-hair:#f1eee7;
+  --uf-ink:#33322e;--uf-ink2:#605c54;--uf-dim:#948f84;--uf-faint:#bbb4a7;
+  --uf-accent:#4a6b8a;--uf-accent-soft:rgba(74,107,138,.10);--uf-accent-line:rgba(74,107,138,.32);
+  --uf-k-type:#7c6aa8;--uf-k-function:#4a6b8a;--uf-k-module:#4a8a72;--uf-k-store:#a8824a;--uf-k-class:#a85a6a;
+  --uf-shadow:0 1px 2px rgba(40,36,30,.04),0 6px 20px rgba(40,36,30,.05);
+  --uf-shadow-lift:0 2px 6px rgba(40,36,30,.07),0 14px 40px rgba(40,36,30,.09);
+  --uf-ease:cubic-bezier(.22,.61,.36,1);
+  background:var(--uf-bg);color:var(--uf-ink);
+  font:14px/1.55 Inter,-apple-system,BlinkMacSystemFont,ui-sans-serif,system-ui;
+  -webkit-font-smoothing:antialiased}
+.uf-overlay.dark{
+  --uf-bg:#131315;--uf-stage:#161618;--uf-surface:#1c1c1f;--uf-surface2:#212125;
+  --uf-line:#2b2b30;--uf-line-soft:#242428;--uf-hair:#202024;
+  --uf-ink:#e7e4dd;--uf-ink2:#b4afa5;--uf-dim:#8b867c;--uf-faint:#5c584f;
+  --uf-accent:#82a8cc;--uf-accent-soft:rgba(130,168,204,.12);--uf-accent-line:rgba(130,168,204,.34);
+  --uf-k-type:#b09bd8;--uf-k-function:#82a8cc;--uf-k-module:#77c2a2;--uf-k-store:#d0a862;--uf-k-class:#d68a9a;
+  --uf-shadow:0 1px 2px rgba(0,0,0,.30),0 8px 26px rgba(0,0,0,.34);
+  --uf-shadow-lift:0 2px 8px rgba(0,0,0,.40),0 18px 48px rgba(0,0,0,.46)}
+.uf-overlay.show{display:flex}
+.uf-overlay *{box-sizing:border-box}
+.uf-overlay button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:0}
+.uf-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+.uf-stage{position:relative;flex:1;overflow:hidden;cursor:grab;background:var(--uf-stage)}
+.uf-stage.grab{cursor:grabbing}
+.uf-world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+.uf-world.anim{transition:transform .42s var(--uf-ease)}
+/* wires paint ABOVE the containers: an edge between cards inside unfolded groups must stay
+   visible crossing the group surfaces, or the wires layer lies by omission */
+.uf-wires{position:absolute;top:0;left:0;overflow:visible;pointer-events:none;z-index:2}
+.uf-content{position:relative}
+.uf-dock{position:absolute;left:14px;bottom:14px;display:flex;gap:6px;z-index:20}
+.uf-dock button{width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--uf-line);border-radius:8px;background:var(--uf-surface);color:var(--uf-ink2);
+  box-shadow:var(--uf-shadow);transition:color .15s,border-color .15s}
+.uf-dock button:hover{color:var(--uf-ink);border-color:var(--uf-faint)}
+.uf-dock svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.uf-dock .uf-gap{width:8px}
+.uf-hint{position:absolute;left:0;right:0;bottom:16px;text-align:center;z-index:15;pointer-events:none;
+  color:var(--uf-faint);font-size:12px}
+.uf-hint b{color:var(--uf-dim);font-weight:500}
+
+.uf-grp{border:1px solid var(--uf-line);border-radius:12px;background:var(--uf-surface2);padding:13px;flex:none}
+.uf-grp>.uf-ghead{display:flex;align-items:center;gap:9px;padding:2px 4px 11px;cursor:pointer;user-select:none}
+.uf-grp>.uf-ghead .uf-tw{width:15px;height:15px;flex:none;display:flex;align-items:center;justify-content:center;
+  color:var(--uf-faint);transition:transform .2s var(--uf-ease)}
+.uf-grp>.uf-ghead .uf-tw svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.uf-grp.open>.uf-ghead .uf-tw{transform:rotate(90deg)}
+.uf-grp>.uf-ghead .uf-gname{font-weight:500;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--uf-ink2)}
+.uf-grp>.uf-ghead .uf-gcount{color:var(--uf-faint);font-size:11px;margin-left:auto;font-family:ui-monospace,Menlo,monospace}
+.uf-gbody{display:flex;gap:14px;align-items:flex-start}
+.uf-grp.col>.uf-gbody{flex-direction:column}
+.uf-grp.row>.uf-gbody,.uf-grp.leaf>.uf-gbody{flex-direction:row;flex-wrap:wrap;gap:11px}
+
+.uf-card{position:relative;border:1px solid var(--uf-line);border-radius:10px;background:var(--uf-surface);
+  padding:11px 13px;cursor:pointer;min-width:140px;max-width:230px;flex:none;box-shadow:var(--uf-shadow);
+  transition:border-color .16s,box-shadow .16s,transform .16s,opacity .18s}
+.uf-card:hover{border-color:var(--uf-faint);box-shadow:var(--uf-shadow-lift);transform:translateY(-1px)}
+.uf-card .uf-crow{display:flex;align-items:center;gap:8px}
+.uf-card .uf-dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--uf-faint)}
+.uf-overlay.color .uf-card .uf-dot{background:var(--uf-kc,var(--uf-faint))}
+.uf-card .uf-cname{font-weight:500;font-size:13px;color:var(--uf-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uf-card.sym .uf-cname{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.uf-card .uf-cmeta{color:var(--uf-faint);font-size:10.5px;font-family:ui-monospace,Menlo,monospace;margin-top:4px}
+.uf-card .uf-cdesc{color:var(--uf-ink2);font-size:11.5px;line-height:1.5;margin-top:6px;
+  display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.uf-card .uf-open{position:absolute;top:0;right:0;width:25px;height:100%;display:flex;align-items:center;
+  justify-content:center;color:var(--uf-faint);opacity:0;transition:opacity .15s}
+.uf-card:hover .uf-open{opacity:1}
+.uf-card .uf-open:hover{color:var(--uf-accent)}
+.uf-card .uf-open svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.uf-card.can-open{padding-right:25px}
+.uf-card.sel{border-color:var(--uf-accent);box-shadow:0 0 0 1px var(--uf-accent),var(--uf-shadow-lift)}
+.uf-card.nbr{border-color:var(--uf-accent-line)}
+.uf-card.dim{opacity:.32}
+.uf-card.bh1{border-color:color-mix(in srgb,var(--uf-accent) 62%,var(--uf-line));box-shadow:0 0 0 1px var(--uf-accent-line),var(--uf-shadow-lift)}
+.uf-card.bh2{border-color:color-mix(in srgb,var(--uf-accent) 36%,var(--uf-line))}
+.uf-card.bh3{border-color:color-mix(in srgb,var(--uf-accent) 18%,var(--uf-line))}
+.uf-card .uf-bhop{position:absolute;top:-7px;left:10px;font-family:ui-monospace,Menlo,monospace;font-size:9px;
+  color:var(--uf-accent);background:var(--uf-surface);border:1px solid var(--uf-accent-line);border-radius:5px;padding:0 4px;line-height:12px}
+.uf-overlay:not(.metrics) .uf-card .uf-cmeta{display:none}
+.uf-overlay:not(.desc) .uf-card .uf-cdesc{display:none}
+.uf-iface{margin-top:8px;border-top:1px solid var(--uf-hair);padding-top:7px}
+.uf-iface .uf-ilab{color:var(--uf-faint);font-size:8.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;font-family:ui-monospace,Menlo,monospace}
+.uf-iface .uf-irow{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--uf-ink2);margin:3px 0 0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:250px}
+.uf-iface .uf-vn{color:var(--uf-dim)}
+.uf-overlay:not(.iface) .uf-card .uf-iface{display:none}
+.uf-overlay.iface .uf-card.sym{min-width:220px;max-width:280px}
+
+.uf-panel{width:330px;flex:none;border-left:1px solid var(--uf-line);background:var(--uf-bg);overflow-y:auto;overflow-x:hidden;z-index:30}
+.uf-sec{border-bottom:1px solid var(--uf-line)}
+.uf-sech{display:flex;align-items:center;gap:8px;padding:13px 16px 5px;color:var(--uf-dim);font-size:10.5px;font-weight:600;letter-spacing:.13em}
+.uf-sech .uf-n{margin-left:auto;color:var(--uf-faint);font-family:ui-monospace,Menlo,monospace;font-weight:400}
+.uf-secb{padding:4px 10px 14px}
+.uf-layer{display:flex;align-items:center;gap:10px;padding:7px 6px;border-radius:8px;cursor:pointer}
+.uf-layer:hover{background:var(--uf-surface2)}
+.uf-layer .uf-sw{width:30px;height:18px;border-radius:10px;background:var(--uf-line);position:relative;flex:none;transition:background .18s}
+.uf-layer .uf-sw::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+  background:var(--uf-surface);box-shadow:0 1px 2px rgba(0,0,0,.18);transition:transform .2s var(--uf-ease)}
+.uf-layer.on .uf-sw{background:var(--uf-accent)}
+.uf-layer.on .uf-sw::after{transform:translateX(12px)}
+.uf-layer .uf-lt{font-size:12.5px;color:var(--uf-ink)}
+.uf-layer .uf-ld{font-size:10.5px;color:var(--uf-faint);margin-top:1px}
+.uf-search{width:100%;height:32px;padding:0 11px;border:1px solid var(--uf-line);border-radius:8px;background:var(--uf-surface);
+  color:var(--uf-ink);font-size:12.5px;margin:2px 0 7px}
+.uf-search::placeholder{color:var(--uf-faint)}
+.uf-trow{display:flex;align-items:center;gap:6px;min-height:26px;border-radius:7px;padding:0 6px;cursor:pointer}
+.uf-trow:hover{background:var(--uf-surface2)}
+.uf-trow .uf-ttw{width:14px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--uf-faint)}
+.uf-trow .uf-ttw svg{width:8px;height:8px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .18s}
+.uf-trow.open>.uf-ttw svg{transform:rotate(90deg)}
+.uf-trow .uf-tlabel{font-size:12px;color:var(--uf-ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.uf-trow.on .uf-tlabel{color:var(--uf-ink)}
+.uf-trow.leaf .uf-tlabel{font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.uf-trow.sel{background:var(--uf-accent-soft)}
+.uf-trow .uf-tchk{width:14px;height:14px;flex:none;border:1.4px solid var(--uf-line);border-radius:4px;position:relative}
+.uf-trow.on .uf-tchk{background:var(--uf-accent);border-color:var(--uf-accent)}
+.uf-trow.on .uf-tchk::after{content:'';position:absolute;left:4px;top:1px;width:4px;height:8px;
+  border:solid var(--uf-surface);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.uf-tkids{display:none;margin-left:13px;border-left:1px solid var(--uf-line-soft);padding-left:2px}
+.uf-tkids.open{display:flex;flex-direction:column}
+.uf-insp .uf-ihead{padding:14px 16px 11px}
+.uf-insp .uf-ikind{display:inline-block;font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  font-family:ui-monospace,Menlo,monospace;color:var(--uf-dim);border:1px solid var(--uf-line);border-radius:5px;padding:2px 7px;margin-bottom:8px}
+.uf-insp .uf-iname{font-size:17px;font-weight:600;line-height:1.25;word-break:break-word}
+.uf-insp .uf-iname.uf-mono{font-size:14px}
+.uf-insp .uf-ipath{color:var(--uf-faint);font-size:11px;font-family:ui-monospace,Menlo,monospace;margin-top:5px;word-break:break-word}
+.uf-insp .uf-idesc{color:var(--uf-ink2);font-size:12.5px;line-height:1.6;margin-top:10px}
+.uf-insp .uf-iact{display:flex;gap:8px;margin-top:12px}
+.uf-insp .uf-ibtn{flex:1;text-align:center;height:32px;line-height:30px;border:1px solid var(--uf-line);border-radius:8px;
+  background:var(--uf-surface);color:var(--uf-ink2);font-size:12px}
+.uf-insp .uf-ibtn.pri{border-color:var(--uf-accent-line);color:var(--uf-accent);background:var(--uf-accent-soft)}
+.uf-insp .uf-ibtn:hover{border-color:var(--uf-faint);color:var(--uf-ink)}
+.uf-ilab2{color:var(--uf-dim);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin:0 0 6px}
+.uf-iline{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--uf-ink2);margin:3px 0;white-space:pre-wrap;word-break:break-word}
+.uf-iline .uf-vn{color:var(--uf-dim)}
+.uf-conn{display:flex;align-items:center;gap:8px;padding:6px 9px;border:1px solid var(--uf-line);border-radius:8px;
+  background:var(--uf-surface);cursor:pointer;margin-bottom:5px}
+.uf-conn:hover{border-color:var(--uf-accent-line)}
+.uf-conn .uf-arw{color:var(--uf-faint);font-size:12px;flex:none}
+.uf-conn .uf-cn{font-size:12px;color:var(--uf-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uf-conn .uf-cl{color:var(--uf-faint);font-size:10px;margin-left:auto;font-family:ui-monospace,Menlo,monospace;flex:none}
+.uf-body{margin-top:4px;background:var(--uf-surface2);border:1px solid var(--uf-line);border-radius:8px;overflow:auto;max-height:320px}
+.uf-body pre{margin:0;padding:11px 13px;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;line-height:1.6;color:var(--uf-ink2);white-space:pre}
+.uf-blk{padding:11px 16px;border-top:1px solid var(--uf-line)}
+`;
+
+const KIND_VAR: Record<string, string> = {
+  type: '--uf-k-type', function: '--uf-k-function', module: '--uf-k-module', group: '--uf-k-module',
+  store: '--uf-k-store', class: '--uf-k-class', hook: '--uf-k-function', service: '--uf-k-store',
+  event: '--uf-k-store', component: '--uf-k-class',
+};
+
+const LAYER_DEFS: Array<{ k: string; t: string; d: string }> = [
+  { k: 'calls',   t: 'calls',         d: 'solid call wires' },
+  { k: 'deps',    t: 'dependencies',  d: 'dotted dependency wires' },
+  { k: 'desc',    t: 'descriptions',  d: 'one-line role under each name' },
+  { k: 'iface',   t: 'interfaces',    d: 'accepts / returns on cards' },
+  { k: 'metrics', t: 'metrics',       d: 'child counts · fan-in' },
+  { k: 'color',   t: 'colour',        d: 'tint by kind' },
+  { k: 'blast',   t: 'blast radius',  d: 'ripple what depends on the selection' },
+];
+
+export function initUnfold(ctx: AppContext): UnfoldApi {
+  /* ---- inject CSS once ---- */
+  if (!document.getElementById('unfoldCss')) {
+    const st = document.createElement('style');
+    st.id = 'unfoldCss';
+    st.textContent = CSS;
+    document.head.appendChild(st);
+  }
+
+  /* ---- overlay DOM ---- */
+  const overlay = document.createElement('div');
+  overlay.className = 'uf-overlay';
+  overlay.id = 'unfoldOverlay';
+  overlay.innerHTML = `
+    <div class="uf-stage" id="ufStage">
+      <div class="uf-world" id="ufWorld"><svg class="uf-wires" id="ufWires"></svg><div class="uf-content" id="ufContent"></div></div>
+      <div class="uf-dock">
+        <button id="ufZin" title="Zoom in"><svg viewBox="0 0 16 16"><path d="M8 4v8M4 8h8"/></svg></button>
+        <button id="ufZout" title="Zoom out"><svg viewBox="0 0 16 16"><path d="M4 8h8"/></svg></button>
+        <button id="ufZfit" title="Fit to view"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/></svg></button>
+        <span class="uf-gap"></span>
+        <button id="ufFold" title="Fold everything"><svg viewBox="0 0 16 16"><path d="M8 2v5M8 9v5M3 8h10"/><path d="M5.5 5.5 8 3l2.5 2.5"/><path d="M5.5 10.5 8 13l2.5-2.5"/></svg></button>
+        <button id="ufTheme" title="Light / dark"><svg viewBox="0 0 16 16" id="ufThemeIc"><path d="M13 9.5A5.5 5.5 0 1 1 6.5 3 4.5 4.5 0 0 0 13 9.5Z"/></svg></button>
+        <button id="ufClose" title="Back to the editor (Esc)"><svg viewBox="0 0 16 16"><path d="M3 3l10 10M13 3L3 13"/></svg></button>
+      </div>
+      <div class="uf-hint" id="ufHint"></div>
+    </div>
+    <aside class="uf-panel">
+      <div class="uf-sec"><div class="uf-sech">reveal</div><div class="uf-secb" id="ufLayers"></div></div>
+      <div class="uf-sec"><div class="uf-sech">browse <span class="uf-n" id="ufCount"></span></div>
+        <div class="uf-secb"><input class="uf-search" id="ufSearch" placeholder="find…"><div id="ufTree"></div></div></div>
+      <div class="uf-sec"><div class="uf-insp" id="ufInsp"></div></div>
+    </aside>`;
+  document.body.appendChild(overlay);
+
+  const q = (id: string): HTMLElement => overlay.querySelector('#' + id) as HTMLElement;
+  const stageEl = q('ufStage'), worldEl = q('ufWorld'), contentEl = q('ufContent');
+  const wiresEl = q('ufWires') as unknown as SVGSVGElement;
+  const h = (tag: string, cls?: string, html?: string): HTMLElement => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    return e;
+  };
+
+  /* ================= MODEL (derived from ctx.state on open) ================= */
+  const U = new Map<string, UNode>();
+  let ROOTS: string[] = [];
+  let EDGES: UEdge[] = [];
+  const OUT: Record<string, UEdge[]> = {}, IN: Record<string, UEdge[]> = {};
+
+  const prefixParent = (id: string): string | null => {
+    const i = id.indexOf('__');
+    return i > 0 && ctx.state.nodes[id.slice(0, i)] ? id.slice(0, i) : null;
+  };
+  function parentOf(n: DiagramNode): string | null {
+    if (n.parent && ctx.state.nodes[n.parent]) return n.parent;
+    return prefixParent(n.id);
+  }
+
+  function build(): void {
+    U.clear(); ROOTS = []; EDGES = [];
+    for (const k of Object.keys(OUT)) delete OUT[k];
+    for (const k of Object.keys(IN)) delete IN[k];
+    for (const id in ctx.state.nodes) {
+      const n = ctx.state.nodes[id];
+      const accepts: string[] = [], returns: string[] = [];
+      for (const i of n.fm?.interfaces ?? []) {
+        accepts.push(...i.accepts);
+        returns.push(...i.returns.filter((r) => r && r !== 'void'));
+      }
+      U.set(id, {
+        id,
+        label: n.fm?.name || n.label || id,
+        kind: n.kind ?? (n.shape === 'group' ? 'group' : 'node'),
+        desc: n.fm?.description ?? '',
+        accepts, returns, state: n.fm?.state ?? [],
+        children: [], parent: null, fanIn: 0,
+      });
+    }
+    for (const id in ctx.state.nodes) {
+      const p = parentOf(ctx.state.nodes[id]);
+      const u = U.get(id) as UNode;
+      if (p && p !== id && U.has(p)) {
+        u.parent = p;
+        (U.get(p) as UNode).children.push(id);
+      }
+    }
+    for (const [id, u] of U) if (!u.parent) ROOTS.push(id);
+    const seen = new Map<string, UEdge>();
+    for (const e of ctx.state.edges) {
+      if (e.from === e.to || !U.has(e.from) || !U.has(e.to)) continue;
+      const k = e.from + ' ' + e.to;
+      if (!seen.has(k)) seen.set(k, { from: e.from, to: e.to, label: '', call: false, dep: false, w: 0 });
+      const s = seen.get(k) as UEdge;
+      s.w++;
+      if (e.style === 'dotted') s.dep = true; else s.call = true;
+      if (e.label && s.label.length < 40) s.label = [s.label, e.label].filter(Boolean).join(', ');
+    }
+    EDGES = [...seen.values()];
+    for (const id of U.keys()) { OUT[id] = []; IN[id] = []; }
+    for (const e of EDGES) { OUT[e.from].push(e); IN[e.to].push(e); }
+    for (const id of U.keys()) (U.get(id) as UNode).fanIn = new Set(IN[id].map((e) => e.from)).size;
+    // drop stale view state that no longer resolves
+    for (const id of [...expanded]) if (!U.has(id)) expanded.delete(id);
+    for (const id of [...hidden]) if (!U.has(id)) hidden.delete(id);
+    if (SEL && !U.has(SEL)) SEL = null;
+  }
+  const gu = (id: string): UNode => U.get(id) as UNode;
+  const isContainer = (u: UNode | undefined): boolean => !!u && u.children.length > 0;
+
+  /* ================= VIEW STATE ================= */
+  const expanded = new Set<string>();
+  const hidden = new Set<string>();
+  let SEL: string | null = null, QUERY = '';
+  const layers: Record<string, boolean> = {
+    calls: false, deps: false, desc: false, iface: false, metrics: false, color: false, blast: false,
+  };
+
+  function isRendered(id: string): boolean {
+    let u = U.get(id);
+    const seen = new Set<string>();
+    while (u) {
+      if (seen.has(u.id)) return false;
+      seen.add(u.id);
+      if (hidden.has(u.id)) return false;
+      if (!u.parent) return true;
+      if (!expanded.has(u.parent)) return false;
+      u = U.get(u.parent);
+    }
+    return true;
+  }
+  function visibleRep(id: string): string | null {
+    let u = U.get(id);
+    const seen = new Set<string>();
+    while (u) {
+      if (seen.has(u.id)) return null;
+      seen.add(u.id);
+      if (isRendered(u.id)) return u.id;
+      u = u.parent ? U.get(u.parent) : undefined;
+    }
+    return null;
+  }
+  function revealNode(id: string): void {
+    let u = U.get(id);
+    const chain: string[] = [], seen = new Set<string>();
+    while (u && !seen.has(u.id)) { seen.add(u.id); chain.push(u.id); u = u.parent ? U.get(u.parent) : undefined; }
+    chain.forEach((c) => hidden.delete(c));
+    chain.slice(1).forEach((c) => expanded.add(c));
+  }
+
+  /* ---- blast radius: transitive dependents of the selection ---- */
+  let BLAST_N = 0;
+  let REP_HOPS = new Map<string, number>();
+  function computeBlast(): void {
+    REP_HOPS = new Map(); BLAST_N = 0;
+    if (!layers.blast || !SEL) return;
+    const hop = new Map<string, number>([[SEL, 0]]);
+    const bq: string[] = [SEL];
+    while (bq.length) {
+      const x = bq.shift() as string;
+      for (const e of IN[x] ?? []) if (!hop.has(e.from)) { hop.set(e.from, (hop.get(x) ?? 0) + 1); bq.push(e.from); }
+    }
+    hop.delete(SEL);
+    BLAST_N = hop.size;
+    const selRep = visibleRep(SEL);
+    for (const [id, hp] of hop) {
+      const rep = visibleRep(id);
+      if (!rep || rep === selRep) continue;
+      const cur = REP_HOPS.get(rep);
+      if (cur == null || hp < cur) REP_HOPS.set(rep, hp);
+    }
+  }
+
+  /* ================= CAMERA (bounded) ================= */
+  const Z = { x: 0, y: 0, k: 1 };
+  function setT(anim?: boolean): void {
+    worldEl.classList.toggle('anim', !!anim);
+    worldEl.style.transform = `translate(${Z.x}px,${Z.y}px) scale(${Z.k})`;
+  }
+  const contentSize = (): { w: number; h: number } => ({ w: contentEl.scrollWidth || 1, h: contentEl.scrollHeight || 1 });
+  function clampPan(): void {
+    const { w, h: hh } = contentSize(), sw = stageEl.clientWidth, sh = stageEl.clientHeight, m = 120;
+    Z.x = Math.min(sw - m, Math.max(m - w * Z.k, Z.x));
+    Z.y = Math.min(sh - m, Math.max(m - hh * Z.k, Z.y));
+  }
+  function fitView(anim?: boolean): void {
+    const { w, h: hh } = contentSize(), sw = stageEl.clientWidth, sh = stageEl.clientHeight, pad = 64;
+    Z.k = Math.max(.15, Math.min(1.15, Math.min((sw - pad * 2) / w, (sh - pad * 2) / hh)));
+    Z.x = (sw - w * Z.k) / 2;
+    Z.y = Math.max(pad, (sh - hh * Z.k) / 2);
+    setT(anim);
+  }
+  stageEl.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = stageEl.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    const k2 = Math.max(.15, Math.min(2.5, Z.k * (e.deltaY < 0 ? 1.1 : 0.9)));
+    Z.x = px - (px - Z.x) * (k2 / Z.k);
+    Z.y = py - (py - Z.y) * (k2 / Z.k);
+    Z.k = k2;
+    clampPan(); setT(false);
+  }, { passive: false });
+  let panDrag: { sx: number; sy: number; x: number; y: number } | null = null;
+  stageEl.addEventListener('pointerdown', (e) => {
+    if ((e.target as HTMLElement).closest('.uf-card,.uf-ghead,.uf-open,.uf-dock')) return;
+    panDrag = { sx: e.clientX, sy: e.clientY, x: Z.x, y: Z.y };
+    stageEl.classList.add('grab');
+    stageEl.setPointerCapture(e.pointerId);
+  });
+  stageEl.addEventListener('pointermove', (e) => {
+    if (!panDrag) return;
+    Z.x = panDrag.x + (e.clientX - panDrag.sx);
+    Z.y = panDrag.y + (e.clientY - panDrag.sy);
+    clampPan(); setT(false);
+  });
+  stageEl.addEventListener('pointerup', () => { panDrag = null; stageEl.classList.remove('grab'); });
+
+  /* ================= CANVAS ================= */
+  function depthOf(id: string): number {
+    let d = 0, u = U.get(id);
+    const seen = new Set<string>();
+    while (u && u.parent && !seen.has(u.id)) { seen.add(u.id); d++; u = U.get(u.parent); }
+    return d;
+  }
+  function renderCanvas(): void {
+    contentEl.innerHTML = '';
+    const wrap = h('div');
+    wrap.style.cssText = 'display:flex;gap:28px;align-items:flex-start;padding:52px;flex-wrap:wrap;max-width:2200px';
+    for (const rid of ROOTS) if (isRendered(rid)) wrap.appendChild(nodeEl(rid));
+    contentEl.appendChild(wrap);
+  }
+  const nodeEl = (id: string): HTMLElement =>
+    expanded.has(id) && isContainer(U.get(id)) ? groupEl(gu(id)) : cardEl(gu(id));
+  function groupEl(u: UNode): HTMLElement {
+    const kids = u.children.filter((c) => !hidden.has(c));
+    const allLeaf = kids.every((c) => !(expanded.has(c) && isContainer(U.get(c))));
+    const g = h('div', 'uf-grp open ' + (allLeaf ? 'leaf' : depthOf(u.id) % 2 === 0 ? 'row' : 'col'));
+    g.dataset.id = u.id;
+    const head = h('div', 'uf-ghead',
+      `<span class="uf-tw"><svg viewBox="0 0 10 10"><path d="M3 1l4 4-4 4"/></svg></span>
+       <span class="uf-gname">${esc(u.label)}</span>
+       <span class="uf-gcount">${kids.length}/${u.children.length}</span>`);
+    head.onclick = () => toggleExpand(u.id);
+    g.appendChild(head);
+    const body = h('div', 'uf-gbody');
+    for (const c of kids) body.appendChild(nodeEl(c));
+    g.appendChild(body);
+    return g;
+  }
+  function cardEl(u: UNode): HTMLElement {
+    const canOpen = isContainer(u);
+    const clickOpens = canOpen && (u.kind === 'group' || u.kind === 'node');
+    const sel = SEL === u.id;
+    const blastOn = layers.blast && !!SEL;
+    const hop = blastOn ? REP_HOPS.get(u.id) : undefined;
+    const nbr = !blastOn && SEL ? !sel && isNeighbour(SEL, u.id) : false;
+    const dim = blastOn ? !sel && hop == null : (SEL ? !sel && !nbr : false);
+    const c = h('div', 'uf-card ' + (SYM_KINDS.has(u.kind) ? 'sym ' : '') + (canOpen && !clickOpens ? 'can-open ' : '')
+      + (sel ? 'sel ' : '') + (nbr ? 'nbr ' : '') + (hop != null ? 'bh' + Math.min(3, hop) + ' ' : '') + (dim ? 'dim' : ''));
+    c.dataset.id = u.id;
+    if (layers.color) c.style.setProperty('--uf-kc', `var(${KIND_VAR[u.kind] ?? '--uf-k-function'})`);
+    const meta = canOpen ? `${u.children.length} inside · fan-in ${u.fanIn}` : `${u.kind} · fan-in ${u.fanIn}`;
+    c.innerHTML = `<div class="uf-crow"><span class="uf-dot"></span><span class="uf-cname">${esc(u.label)}</span></div>
+      <div class="uf-cmeta">${esc(meta)}</div>
+      ${u.desc ? `<div class="uf-cdesc">${esc(u.desc)}</div>` : ''}
+      ${ifaceHtml(u)}
+      ${hop != null ? `<span class="uf-bhop">${hop}</span>` : ''}
+      ${canOpen && !clickOpens ? `<span class="uf-open" title="Unfold"><svg viewBox="0 0 16 16"><path d="M6 2H2v4M10 2h4v4M6 14H2v-4M10 14h4v-4"/></svg></span>` : ''}`;
+    c.onclick = (ev) => {
+      if ((ev.target as HTMLElement).closest('.uf-open')) return;
+      if (clickOpens) toggleExpand(u.id); else select(u.id);
+    };
+    if (canOpen && !clickOpens) {
+      (c.querySelector('.uf-open') as HTMLElement).onclick = (ev) => { ev.stopPropagation(); toggleExpand(u.id); };
+    }
+    c.ondblclick = () => { if (canOpen) toggleExpand(u.id); };
+    return c;
+  }
+  function ifaceHtml(u: UNode): string {
+    const rows: string[] = [];
+    const R = (l: string, a: string[]): void => {
+      if (a.length) rows.push(`<div class="uf-ilab">${l}</div>` + a.slice(0, 4).map((x) => `<div class="uf-irow">${ifaceLine(x)}</div>`).join(''));
+    };
+    R('accepts', u.accepts); R('returns', u.returns); R('state', u.state);
+    return rows.length ? `<div class="uf-iface">${rows.join('')}</div>` : '';
+  }
+  function ifaceLine(raw: string): string {
+    const i = raw.indexOf(':');
+    if (i < 0) return esc(raw);
+    return `<span class="uf-vn">${esc(raw.slice(0, i))}:</span>${esc(raw.slice(i + 1))}`;
+  }
+  const isNeighbour = (a: string, b: string): boolean => {
+    const ra = visibleRep(a);
+    return EDGES.some((e) =>
+      (visibleRep(e.from) === ra && visibleRep(e.to) === b) || (visibleRep(e.to) === ra && visibleRep(e.from) === b));
+  };
+
+  /* ================= WIRES ================= */
+  function box(el: HTMLElement): Box {
+    const r = el.getBoundingClientRect(), cr = contentEl.getBoundingClientRect(), k = Z.k;
+    return {
+      x: (r.left - cr.left) / k, y: (r.top - cr.top) / k, w: r.width / k, h: r.height / k,
+      cx: (r.left - cr.left) / k + r.width / k / 2, cy: (r.top - cr.top) / k + r.height / k / 2,
+    };
+  }
+  function orthoPath(a: Box, b: Box, r: number): string {
+    const dx = b.cx - a.cx, dy = b.cy - a.cy;
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      const x1 = dx > 0 ? a.x + a.w : a.x, x2 = dx > 0 ? b.x : b.x + b.w, mx = (x1 + x2) / 2, y1 = a.cy, y2 = b.cy;
+      return `M${x1} ${y1} L${mx - Math.sign(mx - x1) * r} ${y1} Q${mx} ${y1} ${mx} ${y1 + Math.sign(y2 - y1) * r} L${mx} ${y2 - Math.sign(y2 - y1) * r} Q${mx} ${y2} ${mx + Math.sign(x2 - mx) * r} ${y2} L${x2} ${y2}`;
+    }
+    const y1 = dy > 0 ? a.y + a.h : a.y, y2 = dy > 0 ? b.y : b.y + b.h, my = (y1 + y2) / 2, x1 = a.cx, x2 = b.cx;
+    return `M${x1} ${y1} L${x1} ${my - Math.sign(my - y1) * r} Q${x1} ${my} ${x1 + Math.sign(x2 - x1) * r} ${my} L${x2 - Math.sign(x2 - x1) * r} ${my} Q${x2} ${my} ${x2} ${my + Math.sign(y2 - my) * r} L${x2} ${y2}`;
+  }
+  const cvar = (n: string): string => getComputedStyle(overlay).getPropertyValue(n).trim();
+  function drawWires(): void {
+    wiresEl.innerHTML = '';
+    if (!layers.calls && !layers.deps) return;
+    const { w, h: hh } = contentSize();
+    wiresEl.setAttribute('width', String(w));
+    wiresEl.setAttribute('height', String(hh));
+    const edgeCol = cvar('--uf-dim') || '#948f84', selCol = cvar('--uf-accent') || '#4a6b8a';
+    const defs = document.createElementNS(NS, 'defs');
+    const mk = (id: string, col: string, sw: number): SVGMarkerElement => {
+      const m = document.createElementNS(NS, 'marker');
+      m.setAttribute('id', id); m.setAttribute('viewBox', '0 0 8 8');
+      m.setAttribute('refX', '6.2'); m.setAttribute('refY', '4');
+      m.setAttribute('markerWidth', '6'); m.setAttribute('markerHeight', '6');
+      m.setAttribute('orient', 'auto-start-reverse');
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', 'M1.4 1.6 L6 4 L1.4 6.4'); p.setAttribute('fill', 'none');
+      p.setAttribute('stroke', col); p.setAttribute('stroke-width', String(sw));
+      p.setAttribute('stroke-linecap', 'round'); p.setAttribute('stroke-linejoin', 'round');
+      m.appendChild(p);
+      return m;
+    };
+    defs.appendChild(mk('ufAh', edgeCol, 1.4));
+    defs.appendChild(mk('ufAhh', selCol, 1.8));
+    wiresEl.appendChild(defs);
+    const pos: Record<string, Box> = {};
+    contentEl.querySelectorAll<HTMLElement>('[data-id]').forEach((el) => { pos[el.dataset.id as string] = box(el); });
+    interface Agg { a: string; b: string; w: number }
+    const agg = new Map<string, Agg>();
+    for (const e of EDGES) {
+      if (!((e.call && layers.calls) || (e.dep && layers.deps))) continue;
+      const a = visibleRep(e.from), b = visibleRep(e.to);
+      if (!a || !b || a === b || !pos[a] || !pos[b]) continue;
+      const k = a + ' ' + b;
+      if (!agg.has(k)) agg.set(k, { a, b, w: 0 });
+      (agg.get(k) as Agg).w += e.w;
+    }
+    const selRep = SEL ? visibleRep(SEL) : null;
+    const blastOn = layers.blast && !!selRep;
+    const maxw = Math.max(1, ...[...agg.values()].map((x) => x.w));
+    const items = [...agg.values()].sort((x, y) => {
+      const hx = selRep && (x.a === selRep || x.b === selRep), hy = selRep && (y.a === selRep || y.b === selRep);
+      return (hx ? 1 : 0) - (hy ? 1 : 0);
+    });
+    for (const it of items) {
+      const hot = !!selRep && (it.a === selRep || it.b === selRep);
+      const inBlast = blastOn && (REP_HOPS.has(it.a) || it.a === selRep) && (REP_HOPS.has(it.b) || it.b === selRep);
+      const width = 1 + (it.w / maxw) * 2.2;
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('d', orthoPath(pos[it.a], pos[it.b], 7));
+      p.setAttribute('fill', 'none');
+      p.setAttribute('stroke', hot ? selCol : edgeCol);
+      p.setAttribute('stroke-width', String(hot ? Math.max(1.6, width) : width));
+      p.setAttribute('stroke-opacity', String(selRep ? (hot ? .95 : inBlast ? .55 : .13) : .62));
+      p.setAttribute('stroke-linecap', 'round');
+      p.setAttribute('marker-end', hot ? 'url(#ufAhh)' : 'url(#ufAh)');
+      wiresEl.appendChild(p);
+    }
+  }
+
+  /* ================= ORCHESTRATION ================= */
+  let firstFit = true;
+  function render(refit: boolean): void {
+    computeBlast();
+    renderCanvas();
+    renderTree();
+    renderInspector();
+    const shown = [...U.keys()].filter((id) => isRendered(id)).length - ROOTS.filter((r) => isRendered(r)).length;
+    const total = U.size - ROOTS.length;
+    q('ufCount').textContent = shown + ' shown';
+    q('ufHint').innerHTML = shown === 0 || total <= 0 ? ''
+      : `<b>${Math.round((1 - shown / total) * 100)}%</b> still folded · ${shown} of ${total} shown`;
+    // plain timers, never rAF: rAF freezes in occluded windows and the redraw silently stalls
+    setTimeout(() => {
+      if (refit) fitView(!firstFit);
+      firstFit = false;
+      drawWires();
+      setTimeout(drawWires, refit ? 480 : 80);
+    }, 0);
+  }
+  function toggleExpand(id: string): void {
+    if (!isContainer(U.get(id))) return;
+    if (expanded.has(id)) {
+      expanded.delete(id);
+      (function fold(x: string): void { gu(x).children.forEach((c) => { expanded.delete(c); fold(c); }); })(id);
+    } else expanded.add(id);
+    render(true);
+  }
+  function select(id: string): void { SEL = SEL === id ? null : id; render(false); }
+  function foldAll(): void {
+    expanded.clear(); hidden.clear(); SEL = null; QUERY = '';
+    (q('ufSearch') as HTMLInputElement).value = '';
+    render(true);
+  }
+
+  /* ================= TREE ================= */
+  function renderTree(): void {
+    const t = q('ufTree');
+    t.innerHTML = '';
+    for (const rid of ROOTS) t.appendChild(treeRow(rid));
+    if (QUERY) filterTree();
+  }
+  function treeRow(id: string): HTMLElement {
+    const u = gu(id), wrap = h('div');
+    const canOpen = isContainer(u), on = isRendered(id) && !hidden.has(id), open = expanded.has(id);
+    const row = h('div', 'uf-trow ' + (canOpen ? '' : 'leaf ') + (on ? 'on ' : '') + (open ? 'open ' : '') + (SEL === id ? 'sel' : ''));
+    row.dataset.id = id;
+    row.innerHTML = `<span class="uf-ttw">${canOpen ? '<svg viewBox="0 0 10 10"><path d="M3 1l4 4-4 4"/></svg>' : ''}</span>
+      <span class="uf-tlabel">${esc(u.label)}</span>
+      <span class="uf-tchk" title="Show / hide on canvas"></span>`;
+    (row.querySelector('.uf-ttw') as HTMLElement).onclick = (e) => {
+      e.stopPropagation();
+      if (!canOpen) return;
+      revealNode(id);
+      if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
+      render(true);
+    };
+    (row.querySelector('.uf-tchk') as HTMLElement).onclick = (e) => {
+      e.stopPropagation();
+      if (isRendered(id) && !hidden.has(id)) {
+        if (ROOTS.includes(id) && ROOTS.filter((r) => !hidden.has(r)).length <= 1) return;
+        hidden.add(id);
+        if (SEL === id) SEL = null;
+      } else revealNode(id);
+      render(true);
+    };
+    (row.querySelector('.uf-tlabel') as HTMLElement).onclick = (e) => {
+      e.stopPropagation(); revealNode(id); SEL = id; render(true);
+    };
+    wrap.appendChild(row);
+    if (canOpen) {
+      const kids = h('div', 'uf-tkids' + (open ? ' open' : ''));
+      for (const c of u.children) kids.appendChild(treeRow(c));
+      wrap.appendChild(kids);
+    }
+    return wrap;
+  }
+  function filterTree(): void {
+    const hits = new Set<string>();
+    for (const u of U.values()) {
+      if (u.label.toLowerCase().includes(QUERY) || u.desc.toLowerCase().includes(QUERY)) {
+        let x: UNode | undefined = u;
+        const seen = new Set<string>();
+        while (x && !seen.has(x.id)) { seen.add(x.id); hits.add(x.id); x = x.parent ? U.get(x.parent) : undefined; }
+      }
+    }
+    q('ufTree').querySelectorAll<HTMLElement>('.uf-trow').forEach((r) => {
+      const id = r.dataset.id as string;
+      const kb = r.parentElement?.querySelector(':scope > .uf-tkids') as HTMLElement | null;
+      if (kb) { const show = hits.has(id); kb.classList.toggle('open', show); r.classList.toggle('open', show); }
+      r.style.display = hits.size ? (hits.has(id) ? '' : 'none') : '';
+    });
+  }
+
+  /* ================= INSPECTOR (empty until selection) ================= */
+  function renderInspector(): void {
+    const el = q('ufInsp');
+    if (!SEL || !U.has(SEL)) { el.innerHTML = ''; return; }
+    const u = gu(SEL);
+    const isSym = SYM_KINDS.has(u.kind);
+    const canOpen = isContainer(u);
+    const crumbs: string[] = [];
+    let x: UNode | undefined = u;
+    const seen = new Set<string>();
+    while (x && x.parent && !seen.has(x.id)) { seen.add(x.id); x = U.get(x.parent); if (x) crumbs.unshift(x.label); }
+    let html = `<div class="uf-ihead">
+      <span class="uf-ikind">${esc(u.kind)}</span>
+      <div class="uf-iname${isSym ? ' uf-mono' : ''}">${esc(u.label)}</div>
+      ${crumbs.length ? `<div class="uf-ipath">${esc(crumbs.join('  ›  '))}</div>` : ''}
+      ${u.desc ? `<div class="uf-idesc">${esc(u.desc)}</div>` : ''}
+      <div class="uf-iact">
+        ${canOpen ? `<button class="uf-ibtn pri" id="ufIOpen">${expanded.has(u.id) ? 'fold' : 'unfold'}</button>` : ''}
+        ${isRendered(u.id)
+          ? `<button class="uf-ibtn" id="ufIHide">remove from view</button>`
+          : `<button class="uf-ibtn" id="ufIShow">add to view</button>`}
+      </div>
+    </div>`;
+    const blk = (l: string, a: string[]): string =>
+      a.length ? `<div class="uf-blk"><div class="uf-ilab2">${l}</div>${a.map((v) => `<div class="uf-iline">${ifaceLine(v)}</div>`).join('')}</div>` : '';
+    html += blk('accepts', u.accepts) + blk('returns', u.returns) + blk('state', u.state);
+    if (layers.blast) {
+      html += `<div class="uf-blk"><div class="uf-ilab2">blast radius</div><div class="uf-iline">${BLAST_N} transitive dependent${BLAST_N === 1 ? '' : 's'}</div></div>`;
+    }
+    const conns = (arr: UEdge[], key: 'from' | 'to', title: string, arrow: string): string => {
+      const m = new Map<string, string>();
+      for (const e of arr) if (!m.has(e[key])) m.set(e[key], e.label);
+      if (!m.size) return '';
+      return `<div class="uf-blk"><div class="uf-ilab2">${title} (${m.size})</div>`
+        + [...m.entries()].map(([id, lbl]) =>
+          `<div class="uf-conn" data-goto="${esc(id)}"><span class="uf-arw">${arrow}</span><span class="uf-cn">${esc(U.get(id)?.label ?? id)}</span>${lbl ? `<span class="uf-cl">${esc(lbl.split(',')[0])}</span>` : ''}</div>`).join('')
+        + '</div>';
+    };
+    html += conns(OUT[u.id] ?? [], 'to', 'uses →', '→') + conns(IN[u.id] ?? [], 'from', '← used by', '←');
+    const body = (ctx.bodies?.get(u.id) as { body?: string } | undefined)?.body;
+    if (body) html += `<div class="uf-blk"><div class="uf-ilab2">source</div><div class="uf-body"><pre>${esc(body)}</pre></div></div>`;
+    el.innerHTML = html;
+    const io = el.querySelector('#ufIOpen') as HTMLElement | null;
+    if (io) io.onclick = () => toggleExpand(u.id);
+    const ih = el.querySelector('#ufIHide') as HTMLElement | null;
+    if (ih) ih.onclick = () => { hidden.add(u.id); SEL = null; render(true); };
+    const is2 = el.querySelector('#ufIShow') as HTMLElement | null;
+    if (is2) is2.onclick = () => { revealNode(u.id); render(true); };
+    el.querySelectorAll<HTMLElement>('[data-goto]').forEach((r) => {
+      r.onclick = () => { const id = r.dataset.goto as string; revealNode(id); SEL = id; render(true); };
+    });
+  }
+
+  /* ================= LAYERS ================= */
+  function renderLayers(): void {
+    const bx = q('ufLayers');
+    bx.innerHTML = '';
+    for (const L of LAYER_DEFS) {
+      const row = h('div', 'uf-layer' + (layers[L.k] ? ' on' : ''),
+        `<span class="uf-sw"></span><span style="flex:1;min-width:0"><div class="uf-lt">${L.t}</div><div class="uf-ld">${L.d}</div></span>`);
+      row.onclick = () => { layers[L.k] = !layers[L.k]; applyLayerClasses(); renderLayers(); render(false); };
+      bx.appendChild(row);
+    }
+  }
+  function applyLayerClasses(): void {
+    overlay.classList.toggle('desc', layers.desc);
+    overlay.classList.toggle('iface', layers.iface);
+    overlay.classList.toggle('metrics', layers.metrics);
+    overlay.classList.toggle('color', layers.color);
+  }
+
+  /* ================= CHROME-LESS CONTROLS ================= */
+  q('ufZin').onclick = () => { Z.k = Math.min(2.5, Z.k * 1.15); clampPan(); setT(true); };
+  q('ufZout').onclick = () => { Z.k = Math.max(.15, Z.k / 1.15); clampPan(); setT(true); };
+  q('ufZfit').onclick = () => fitView(true);
+  q('ufFold').onclick = foldAll;
+  function applyDark(dark: boolean): void {
+    overlay.classList.toggle('dark', dark);
+    q('ufThemeIc').innerHTML = dark
+      ? '<circle cx="8" cy="8" r="3.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.2 3.2l1.4 1.4M11.4 11.4l1.4 1.4M12.8 3.2l-1.4 1.4M4.6 11.4l-1.4 1.4"/>'
+      : '<path d="M13 9.5A5.5 5.5 0 1 1 6.5 3 4.5 4.5 0 0 0 13 9.5Z"/>';
+    localStorage.setItem('unfold.theme', dark ? 'dark' : 'light');
+    drawWires();
+  }
+  q('ufTheme').onclick = () => applyDark(!overlay.classList.contains('dark'));
+  (q('ufSearch') as HTMLInputElement).oninput = (e) => {
+    QUERY = (e.target as HTMLInputElement).value.trim().toLowerCase();
+    renderTree();
+  };
+  document.addEventListener('keydown', (e) => {
+    if (!overlay.classList.contains('show') || e.key !== 'Escape') return;
+    e.stopPropagation();
+    if (SEL) { SEL = null; render(false); }
+    else if (QUERY) { QUERY = ''; (q('ufSearch') as HTMLInputElement).value = ''; renderTree(); }
+    else close();
+  }, true);
+
+  /* ================= API ================= */
+  function open(): void {
+    applyDark(localStorage.getItem('unfold.theme') === 'dark');
+    build();
+    applyLayerClasses();
+    renderLayers();
+    overlay.classList.add('show');
+    firstFit = true;
+    render(true);
+  }
+  function close(): void { overlay.classList.remove('show'); }
+  const closeFn = close;
+  q('ufClose').onclick = closeFn;
+  return {
+    open,
+    close: closeFn,
+    toggle: () => (overlay.classList.contains('show') ? closeFn() : open()),
+  };
+}

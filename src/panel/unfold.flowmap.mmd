@@ -1,0 +1,72 @@
+flowchart LR
+%% root unfold
+
+%% src UnfoldApi src/panel/unfold.ts#UnfoldApi
+%% kind UnfoldApi type
+%% fm:meta UnfoldApi name=UnfoldApi
+%% fm:meta UnfoldApi desc=public surface: open, close, toggle
+
+%% src initUnfold src/panel/unfold.ts#initUnfold
+%% kind initUnfold function
+%% fm:meta initUnfold name=initUnfold
+%% fm:meta initUnfold desc=build the reading-mode overlay (own DOM + own CSS, the planner isolation pattern) bound to ctx; reads ctx.state + ctx.bodies, writes nothing
+%% fm:meta initUnfold i0.name=initUnfold
+%% fm:meta initUnfold i0.accepts=ctx: AppContext
+%% fm:meta initUnfold i0.returns=UnfoldApi
+
+%% src ufBuild src/panel/unfold.ts#build
+%% kind ufBuild function
+%% fm:meta ufBuild name=build
+%% fm:meta ufBuild desc=derive the folded units from ctx.state on every open: live parent wins, else the flowmap mod__rest drill convention; de-dup edges, fan-in
+%% fm:meta ufBuild i0.name=build
+%% fm:meta ufBuild i0.returns=void
+
+%% src ufRenderCanvas src/panel/unfold.ts#renderCanvas
+%% kind ufRenderCanvas function
+%% fm:meta ufRenderCanvas name=renderCanvas
+%% fm:meta ufRenderCanvas desc=render the containment roots as nested flex cards/groups; only expanded containers show their children
+%% fm:meta ufRenderCanvas i0.name=renderCanvas
+%% fm:meta ufRenderCanvas i0.returns=void
+
+%% src ufDrawWires src/panel/unfold.ts#drawWires
+%% kind ufDrawWires function
+%% fm:meta ufDrawWires name=drawWires
+%% fm:meta ufDrawWires desc=orthogonal wires aggregated to the visible representatives, gated by the calls/deps layers, painted above the group surfaces
+%% fm:meta ufDrawWires i0.name=drawWires
+%% fm:meta ufDrawWires i0.returns=void
+
+%% src ufComputeBlast src/panel/unfold.ts#computeBlast
+%% kind ufComputeBlast function
+%% fm:meta ufComputeBlast name=computeBlast
+%% fm:meta ufComputeBlast desc=reverse-BFS the transitive dependents of the selection and map them to visible cards with min hop distance
+%% fm:meta ufComputeBlast i0.name=computeBlast
+%% fm:meta ufComputeBlast i0.returns=void
+
+%% src ufRenderInspector src/panel/unfold.ts#renderInspector
+%% kind ufRenderInspector function
+%% fm:meta ufRenderInspector name=renderInspector
+%% fm:meta ufRenderInspector desc=empty until selection; then kind, crumbs, desc, interfaces, blast count, connections, and the real source body from ctx.bodies
+%% fm:meta ufRenderInspector i0.name=renderInspector
+%% fm:meta ufRenderInspector i0.returns=void
+
+%% parent uf_api unfold
+%% parent uf_view unfold
+
+  subgraph uf_api ["Public API"]
+    initUnfold("initUnfold")
+    UnfoldApi>"UnfoldApi"]
+  end
+  subgraph uf_view ["Folded view"]
+    ufBuild("build")
+    ufRenderCanvas("renderCanvas")
+    ufDrawWires("drawWires")
+    ufComputeBlast("computeBlast")
+    ufRenderInspector("renderInspector")
+  end
+
+  initUnfold -.->|returns| UnfoldApi
+  initUnfold --> ufBuild
+  initUnfold --> ufRenderCanvas
+  ufRenderCanvas --> ufDrawWires
+  initUnfold --> ufComputeBlast
+  initUnfold --> ufRenderInspector

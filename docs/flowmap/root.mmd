@@ -81,6 +81,8 @@ flowchart LR
 %% fm:meta plan desc=build-plan overlay model (pure): status/intent/phase changes keyed on real nodes/edges, plus blast-radius and coherence helpers
 %% fm:meta planner name=planner
 %% fm:meta planner desc=full-screen build-plan review surface: status overlay on the real map, tri-pane sync, accept/reject with dependency coherence, gated export to buildspec
+%% fm:meta unfold name=unfold
+%% fm:meta unfold desc=reading mode: full-screen folded view of ctx.state — containment roots only at arrival, unfold in place, opt-in layers (wires, desc, interfaces, metrics, colour, blast radius), browse tree, inspector with ctx.bodies source
 
 %% kind main module
 %% kind state module
@@ -122,6 +124,7 @@ flowchart LR
 %% kind diffWorkspace module
 %% kind plan module
 %% kind planner module
+%% kind unfold module
 
   main["main.ts"]
   state["state"]
@@ -163,6 +166,7 @@ flowchart LR
   diffWorkspace["diffWorkspace"]
   plan["plan"]
   planner["planner"]
+  unfold["unfold"]
 
   main -->|1 createState| state
   main -->|2 createHooks| context
@@ -252,6 +256,8 @@ flowchart LR
   slice -.->|fromMermaid| mermaid
   slice -.->|sliceIds, sliceStubs| state
   main -->|30 planner| planner
+  main -->|31 unfold| unfold
   plan -.->|types| types
   planner -.->|childIdsOf, containerOf| state
   planner -.->|plan overlay| plan
+  unfold -.->|esc| config
