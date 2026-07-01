@@ -67,3 +67,17 @@ test('a missing change id is a hard error (exit 3)', () => {
   const r = run(['--change', 'no-such-change-xyz', '--json']);
   assert.equal(r.status, 3);
 });
+
+test('PASS_UNPROVEN exits 1 under --strict (JSON unchanged)', () => {
+  const r = run(['--change', 'fit-clamp', '--json', '--strict']);
+  assert.equal(r.status, 1);
+  const v = JSON.parse(r.stdout);
+  assert.equal(v.verdict, 'PASS_UNPROVEN');
+});
+
+test('PASS still exits 0 under --strict', () => {
+  const r = run(['--change', 'frame-transform', '--json', '--strict']);
+  assert.equal(r.status, 0);
+  const v = JSON.parse(r.stdout);
+  assert.equal(v.verdict, 'PASS');
+});

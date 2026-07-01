@@ -21,8 +21,11 @@
    Usage:
      node verify-change.mjs --change <id> [--plan public/plan.json]
                  [--map docs/flowmap/_bundle.mmd] [--tsconfig tsconfig.json] [--json]
-   Exit: 0 = PASS, 1 = FAIL, 2 = bad invocation, 3 = change id not in plan.
+                 [--strict]
+   Exit: 0 = PASS, 1 = FAIL or PASS_UNPROVEN, 2 = bad invocation, 3 = change id not in plan.
    With --json: stdout is the canonical verdict (byte-stable; safe to hash).
+   Under --strict, PASS_UNPROVEN (and any non-PASS) exits non-zero; the JSON body is
+   byte-identical in both modes.
    ===================================================================== */
 
 import { readFileSync } from 'node:fs';
@@ -45,9 +48,10 @@ const PLAN = arg('--plan', join(ROOT, 'public', 'plan.json'));
 const MAP = arg('--map', join(ROOT, 'docs', 'flowmap', '_bundle.mmd'));
 const TSCONFIG = arg('--tsconfig', join(ROOT, 'tsconfig.json'));
 const JSON_OUT = process.argv.includes('--json');
+const STRICT = process.argv.includes('--strict');
 
 if (!CHANGE) {
-  console.error('usage: verify-change.mjs --change <id> [--plan <p>] [--map <m>] [--tsconfig <t>] [--json]');
+  console.error('usage: verify-change.mjs --change <id> [--plan <p>] [--map <m>] [--tsconfig <t>] [--json] [--strict]\n  under --strict, PASS_UNPROVEN (and any non-PASS) exits non-zero; the JSON body is byte-identical in both modes.');
   process.exit(2);
 }
 
@@ -97,7 +101,7 @@ let verdict;
 if (!structuralOk || behaviouralOk === false) verdict = 'FAIL';
 else if (behaviourallyProven) verdict = 'PASS';
 else verdict = 'PASS_UNPROVEN';
-const pass = verdict !== 'FAIL';
+const pass = STRICT ? verdict === 'PASS' : verdict !== 'FAIL';
 
 const body = {
   verdictVersion: 1,

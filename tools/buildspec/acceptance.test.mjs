@@ -57,6 +57,65 @@ test('a symbol with no map mapping (unimplemented) is RED', { skip: !AVAILABLE }
   assert.equal(res.results.every((r) => !r.pass), true, 'an unmapped/unimplemented symbol must be red');
 });
 
+/* ---- H1: projection-kind cases (ctx/DOM-bound behaviour without a DOM) ---- */
+
+test('collectCases lifts kind:projection + the lens onto the case', () => {
+  const map = srcDirectives('%% src levelPositions src/core/plan/plan.ts#levelPositions\n');
+  const plan = { changes: [{ id: 'x', status: 'modify', target: { kind: 'node', ref: 'levelPositions' },
+    acceptance: { cases: [{ name: 'p', kind: 'projection', projection: '(r) => r.a', args: [[]], equals: {} }] } }] };
+  const c = collectCases(plan, map)[0];
+  assert.equal(c.kind, 'projection');
+  assert.equal(c.projection, '(r) => r.a');
+});
+
+test('collectCases defaults a case to kind:pure with no lens', () => {
+  const map = srcDirectives('%% src levelPositions src/core/plan/plan.ts#levelPositions\n');
+  const plan = { changes: [{ id: 'x', status: 'modify', target: { kind: 'node', ref: 'levelPositions' },
+    acceptance: { cases: [{ name: 'p', args: [[]], equals: {} }] } }] };
+  const c = collectCases(plan, map)[0];
+  assert.equal(c.kind, 'pure');
+  assert.equal(c.projection, null);
+});
+
+test('a projection case asserting a SLICE of the real result goes GREEN', { skip: !AVAILABLE }, () => {
+  const planPath = writePlan([
+    { name: 'project the x of node a', kind: 'projection',
+      args: [[{ id: 'a', x: 11, y: 22, synth: false }]],
+      projection: '(result) => result.a.x', equals: 11 },
+  ]);
+  const res = runAcceptance({ planPath, mapPath: BUNDLE });
+  assert.ok(res.ran);
+  assert.equal(res.results.every((r) => r.pass), true, `expected green, got ${JSON.stringify(res.results)}`);
+});
+
+test('a projection case with a WRONG slice expectation goes RED', { skip: !AVAILABLE }, () => {
+  const planPath = writePlan([
+    { name: 'wrong projected slice', kind: 'projection',
+      args: [[{ id: 'a', x: 11, y: 22, synth: false }]],
+      projection: '(result) => result.a.x', equals: 999 },
+  ]);
+  const res = runAcceptance({ planPath, mapPath: BUNDLE });
+  assert.equal(res.results.some((r) => !r.pass), true, 'a wrong projected slice must fail');
+});
+
+test('a projection case with NO lens is RED (not a silent pass)', { skip: !AVAILABLE }, () => {
+  const planPath = writePlan([
+    { name: 'missing lens', kind: 'projection',
+      args: [[{ id: 'a', x: 11, y: 22, synth: false }]], equals: 11 },
+  ]);
+  const res = runAcceptance({ planPath, mapPath: BUNDLE });
+  assert.equal(res.results.every((r) => !r.pass), true, 'a projection case with no lens must be red');
+});
+
+test('a projection run is byte-identical across two runs (replay idiom)', { skip: !AVAILABLE }, () => {
+  const cases = [{ name: 'project x', kind: 'projection',
+    args: [[{ id: 'a', x: 11, y: 22, synth: false }]],
+    projection: '(result) => result.a.x', equals: 11 }];
+  const r1 = runAcceptance({ planPath: writePlan(cases), mapPath: BUNDLE });
+  const r2 = runAcceptance({ planPath: writePlan(cases), mapPath: BUNDLE });
+  assert.equal(JSON.stringify(r1.results), JSON.stringify(r2.results), 'projection results must be identical across runs');
+});
+
 /* ---- helpers ---- */
 import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';

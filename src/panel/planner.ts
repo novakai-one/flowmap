@@ -578,8 +578,17 @@ export function initPlanner(ctx: AppContext, deps: { mermaid: MermaidApi }): Pla
     const isAcc = (id: string): boolean => verdicts[id] === 'accept';
     const accepted = plan.changes.filter((c) => isAcc(c.id));
 
-    // the approved spec = base map + accepted adds / removes / fm-mutations. This is
-    // the real artifact the deterministic pipeline (spec-to-stubs + gate) enforces.
+    // (1) the DECISION ARTIFACT (H2) — the human's per-change verdicts captured as
+    // DATA, not discarded. approve-export.mjs --accepted-only consumes this to mint the
+    // SAME enforceable bundle (approved.mmd + contracts + CHECKLIST + plan.json), so the
+    // human review is itself a verifiable artifact and editor-approval drives the CLI bundle.
+    const decisionVerdicts: Record<string, Verdict> = {};
+    for (const [id, v] of Object.entries(verdicts)) if (v) decisionVerdicts[id] = v;
+    const decision: Plan = { ...plan, verdicts: decisionVerdicts };
+    downloadText('approved-plan.json', JSON.stringify(decision, null, 2));
+
+    // (2) the approved spec preview = base map + accepted adds / removes / fm-mutations
+    // (visual reference; the CLI re-derives the canonical map via toMmd from the artifact above).
     const model = applyPlan(ctx.state, plan, isAcc);
     downloadText('approved-spec.mmd', serializeSpec(model));
 
@@ -591,8 +600,8 @@ export function initPlanner(ctx: AppContext, deps: { mermaid: MermaidApi }): Pla
     const withSig = accepted.filter((c) => c.fm).length;
 
     $('plS3').className = 'pl-step done'; $('plS4').className = 'pl-step active';
-    $('plVmsg').innerHTML = `<b style="color:#5bd6a0">approved-spec.mmd</b> downloaded · ${newNodes} new + ${mods} modified → run <code>spec:stubs</code> then <code>flowmap:gate</code>`;
-    ctx.hooks.toast(`Approved spec: ${newNodes} new node(s), ${newEdges} edge(s), ${mods} modify, ${removes} remove · ${withSig} carry a signature contract`);
+    $('plVmsg').innerHTML = `<b style="color:#5bd6a0">approved-plan.json</b> downloaded (${accepted.length} accepted) · ${newNodes} new + ${mods} modified → run <code>flowmap:approve -- --plan approved-plan.json --accepted-only --out build/approval</code>`;
+    ctx.hooks.toast(`Decision artifact: ${accepted.length} accepted (${newNodes} new node(s), ${newEdges} edge(s), ${mods} modify, ${removes} remove · ${withSig} carry a signature contract) → approve-export --accepted-only`);
   }
 
   function togglePlan(): void {

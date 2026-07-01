@@ -20,7 +20,43 @@ npm run flowmap:quiz -- generate --n 12 --seed 1
 npm run flowmap:quiz -- check --answers answers.json --seed 1   # 100% = handover trusted
 ```
 
-## 1·now. Phase G — the agent/subagent contract spine (route, not compute)
+## 1·now. Phase H — the two-contract gap closure (purpose review → built)
+
+A purpose review found the AI↔human↔AI and AI↔subagent contracts were *demonstrable* but not yet
+*load-bearing*; five seams. Phase H closes them. Tooling-track items are verified by their own
+`node --test` + `flowmap:replay`; status is computed by the roadmap predicate. Each row is runnable.
+
+| What | Verify it yourself | Expect |
+|---|---|---|
+| **H1 — projection acceptance**: behavioural contracts now bind ctx/DOM-bound code, not only pure fns | `node --test tools/buildspec/acceptance.test.mjs` | 10/10 (slice GREEN · wrong-slice RED · no-lens RED · determinism) |
+| **H2 — editor decision artifact**: the editor emits `approved-plan.json` = plan+verdicts; the CLI mints the bundle | `grep -n approved-plan.json src/panel/planner.ts` · `node --test tools/flowmap/approve-export.test.mjs` | present · 4/4 (incl. editor→CLI round-trip) |
+| **H3 — verify-change `--strict`**: a shaped-but-unproven change no longer exits 0 | `node tools/flowmap/verify-change.mjs --change fit-clamp --json --strict; echo $?` · `… --change frame-transform --json --strict; echo $?` | `1` (unproven) · `0` (proven) |
+| **H4 — orchestrator + worktree isolation**: waves → per-change worktree+contract → strict verdict → canonical summary | `node tools/flowmap/orchestrate.mjs --plan public/plan.json` · `node --test tools/flowmap/orchestrate.test.mjs` | wave-0 dispatch + summary (exit 1 = unbuilt, expected) · 6/6 |
+| H4 determinism (worktree side-effects must not perturb stdout) | `node tools/flowmap/replay.mjs --task "node tools/flowmap/orchestrate.mjs --plan public/plan.json --json" --n 5` | `DETERMINISTIC` · one hash |
+| **H5 — handoff content-falsifiability**: a handoff that misstates a file's git state fails the gate | `node --test tools/flowmap/handoff-fresh.test.mjs` | 5/5 (incl. the real two-bullet pattern + no false positive) |
+| Phase H computes BUILT (status, not prose) | `npm run flowmap:roadmap` | H1–H5 `[BUILT]` · 31 built |
+| Plan coherent + certified; whole suite green; map in sync | `npm run flowmap:plan-check -- --plan docs/flowmap/plans/phase-h.plan.json` · `npm run spec:test:all` · `npm run flowmap:gate` | coherent · 153/153 · in sync |
+
+**Plan + machine-checked intent** (coherence proven by `npm run flowmap:plan-check -- --plan
+docs/flowmap/plans/phase-h.plan.json`): `docs/flowmap/plans/phase-h.plan.json`.
+
+**Honest boundaries (do not oversell):**
+- Like Phase G, four of five are `.mjs` TOOLING — deliberately NOT in `_bundle.mmd`, NOT gated by
+  `flowmap:gate`; verified by `node --test` + `flowmap:replay`. The plan is checked by
+  `flowmap:plan-check` only (it also passes `plan-cert` with zero delta). H2's editor change IS
+  app-TS and rides `flowmap:gate`.
+- **H4 is a v1 driver**: it provisions an isolated worktree per dispatched change and drops the
+  contract packet in (the workspace a parallel build-agent would use), and routes the strict-aware
+  verdict via the MAIN repo — a HEAD worktree lacks gitignored `node_modules` (ts-morph), so the
+  gate cannot run inside it. Wiring an actual build agent INTO each worktree (then re-verifying from
+  within) is the next increment; the schedule, the isolation and the routed verdict exist here.
+- **H5 retains the dirty-handoff bypass**: while `SESSION_HANDOFF.md` is modified in the working
+  tree, `flowmap:handoff:check` exits 0 without running the content check (the agent is editing it).
+  The content check's correctness is proven by `node --test tools/flowmap/handoff-fresh.test.mjs`
+  and by running `checkContentClaims` on this file's own HEAD revision (it flagged the prior
+  false Phase-G claim, which is now removed). Commit state is derivable from `git status`.
+
+## 1·recent. Phase G — the agent/subagent contract spine (route, not compute)
 
 Built the tooling that makes subagent execution verifiable with **zero prose in the verdict or
 handover**: a 0-context subagent receives a deterministic *contract packet*, returns a tool-computed
@@ -60,8 +96,6 @@ Each row is runnable.
   ignores it), same status as `desc=`.
 - **`PASS_UNPROVEN`** exits 0 like `PASS`; a strict caller that wants 100%-proven execution must check
   `verdict === "PASS"` in the JSON, not just the exit code.
-- **Not yet committed:** these files are working-tree-only until committed; a clean checkout would drop
-  Phase G. (`git status` shows them untracked.)
 
 **Remaining intent (Phase G follow-ons, none blocking):** the **wave-scheduler is now built**
 (`flowmap:waves`, G5) — an orchestrator can fan out the wave-0 set to N parallel subagents, each

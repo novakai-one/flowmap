@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -137,6 +137,41 @@ test('approveExport --accepted-only filters by verdicts', () => {
     assert.equal(planCopy.changes.length, 1, 'plan.json copy has 1 accepted change');
   } finally {
     rmSync(outDir, { recursive: true, force: true });
+  }
+});
+
+/* ---------- H2: the editor's decision artifact drives the CLI bundle ---------- */
+
+test('H2 — editor decision artifact (plan + verdicts) drives approve-export --accepted-only via the CLI', () => {
+  // Exactly what planner.ts doExport now downloads: { ...plan, verdicts }.
+  const decision = {
+    base: 'editor-decision',
+    verdicts: { 'add-widget': 'accept', 'modify-module': 'reject' },
+    changes: testPlan.changes,
+  };
+  const dir = mkdtempSync(join(tmpdir(), 'flowmap-h2-decision-'));
+  const planFile = join(dir, 'approved-plan.json');
+  const mapFile = join(dir, 'base.mmd');
+  const outDir = join(dir, 'out');
+  writeFileSync(planFile, JSON.stringify(decision, null, 2));
+  writeFileSync(mapFile, BASE_MMD);
+  try {
+    const r = spawnSync(process.execPath, [
+      join(HERE, 'approve-export.mjs'),
+      '--plan', planFile, '--out', outDir, '--map', mapFile, '--accepted-only',
+    ], { encoding: 'utf8', timeout: 55_000 });
+    assert.equal(r.status, 0, `approve-export should exit 0; stderr: ${r.stderr}`);
+
+    // accepted change present, rejected change excluded from the bundle
+    const checklist = readFileSync(join(outDir, 'CHECKLIST.md'), 'utf8');
+    assert.ok(checklist.includes('newWidget'), 'accepted add-widget appears in CHECKLIST');
+    assert.ok(!checklist.includes('existingModule'), 'rejected modify-module excluded from CHECKLIST');
+
+    const planCopy = JSON.parse(readFileSync(join(outDir, 'plan.json'), 'utf8'));
+    assert.equal(planCopy.changes.length, 1, 'only the accepted change survives the artifact round-trip');
+    assert.equal(planCopy.changes[0].id, 'add-widget');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

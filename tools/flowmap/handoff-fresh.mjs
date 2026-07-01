@@ -34,12 +34,102 @@
  */
 
 import { execSync } from 'node:child_process';
+import { readFileSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, '..', '..');
+const IS_MAIN = process.argv[1] === fileURLToPath(import.meta.url);
 const CHECK = process.argv.includes('--check');
 
 function run(cmd) {
   return execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
 }
+
+/**
+ * H5 — content-falsifiability. Scan docText for a commit-status assertion
+ * ("not yet committed" / "untracked" / "uncommitted" / "working-tree-only")
+ * that is demonstrably FALSE: git shows the referenced file(s) committed.
+ *
+ * Robust to the handoff's real convention, where the claim is a vague
+ * back-reference ("…these files…") and the file names live in a separate
+ * "**New files:**" / "**Edited:**" bullet using project-relative names
+ * (e.g. `lib/canonical.mjs`). Tokens are resolved across known roots, so a
+ * `tools/flowmap/`-relative name still resolves. A claim is only considered
+ * when it is a bold label or a list-item opener — never incidental prose —
+ * and a file is only flagged when it EXISTS on disk AND has a commit; an
+ * unresolved or genuinely-uncommitted file yields no violation (no false +ve).
+ *
+ * @param {string} docText - full text of SESSION_HANDOFF.md
+ * @returns {string[]} - violation strings; empty means no falsified claims
+ */
+export function checkContentClaims(docText) {
+  const ASSERT_RE = /(not yet committed|working-tree-only|untracked|uncommitted)/i;
+  const BACKREF_RE = /\b(these|those|them|the (?:above|following|listed))\b/i;
+  const LIST_LABEL_RE = /\*\*\s*(new files|edited|new|added)\b/i;
+  // backtick-quoted file tokens with a code-ish extension.
+  const PATH_RE = /`([^`\s]+?\.(?:mjs|cjs|js|ts|tsx|json|yml|yaml|md|txt))`/g;
+  const ROOTS = ['', 'tools/flowmap/', 'tools/buildspec/', 'tools/', 'src/', 'docs/flowmap/', 'docs/', '.github/workflows/', '.claude/'];
+
+  const lines = docText.split('\n');
+  const isLabelledClaim = (ln) => ASSERT_RE.test(ln) && (/^\s*[-*]\s+/.test(ln) || /\*\*/.test(ln));
+
+  // Resolve a token across known roots; return {path, sha} only if it EXISTS
+  // and is committed. exists-but-uncommitted => claim is true => null.
+  function committedPath(token) {
+    for (const root of ROOTS) {
+      const rel = root + token;
+      if (existsSync(join(ROOT, rel))) {
+        try { const out = run(`git log -1 --oneline -- "${rel}"`); if (out) return { path: rel, sha: out.split('\n')[0] }; }
+        catch { /* git unavailable — cannot prove */ }
+        return null;
+      }
+    }
+    return null;
+  }
+
+  // Tokens named in every "**New files"/"**Edited" labelled bullet — the files
+  // a back-referencing claim ("these files…") points at.
+  function listedTokens() {
+    const toks = [];
+    for (let k = 0; k < lines.length; k++) {
+      if (!LIST_LABEL_RE.test(lines[k])) continue;
+      let block = lines[k], m = k + 1;
+      while (m < lines.length && lines[m].trim() !== '') { block += '\n' + lines[m]; m++; }
+      for (const x of block.matchAll(PATH_RE)) toks.push(x[1]);
+    }
+    return toks;
+  }
+
+  const violations = [];
+  const seen = new Set();
+  let i = 0;
+  while (i < lines.length) {
+    if (!isLabelledClaim(lines[i])) { i++; continue; }
+    let block = lines[i], j = i + 1;
+    while (j < lines.length && lines[j].trim() !== '') { block += '\n' + lines[j]; j++; }
+
+    let tokens = [...block.matchAll(PATH_RE)].map((m) => m[1]);
+    // vague/back-referencing claim ("these files") => resolve against the doc's
+    // New files/Edited lists, so the claim is still machine-falsifiable.
+    if (BACKREF_RE.test(block) || tokens.length === 0) tokens = tokens.concat(listedTokens());
+
+    for (const tok of tokens) {
+      if (seen.has(tok)) continue;
+      seen.add(tok);
+      const hit = committedPath(tok);
+      if (hit) violations.push(
+        `SESSION_HANDOFF.md asserts files are not committed, but git shows "${hit.path}" committed (${hit.sha})`,
+      );
+    }
+    i = j;
+  }
+  return violations;
+}
+
+// Only execute when run directly (not when imported as a module).
+if (IS_MAIN) {
 
 // F4 strict gate: committed code newer than committed handoff → stale → exit 1.
 if (CHECK) {
@@ -58,6 +148,14 @@ if (CHECK) {
         '✗ SESSION_HANDOFF.md is stale — the last commit touching src/|tools/ is newer than the\n' +
         '  last commit touching the handoff. Re-sync (flowmap:ship) and update the handoff before merge.\n'
       );
+      process.exit(1);
+    }
+    // H5 — content-falsifiability check: flag "Not yet committed" claims that
+    // are demonstrably false (the file IS in git history).
+    const handoffText = readFileSync('docs/flowmap/SESSION_HANDOFF.md', 'utf8');
+    const violations = checkContentClaims(handoffText);
+    if (violations.length) {
+      for (const v of violations) process.stdout.write('✗ ' + v + '\n');
       process.exit(1);
     }
     process.stdout.write('✓ handoff is at least as fresh as the last code commit\n');
@@ -104,3 +202,5 @@ try {
 }
 
 process.exit(0);
+
+} // end IS_MAIN

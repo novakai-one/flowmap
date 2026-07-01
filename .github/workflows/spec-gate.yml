@@ -60,6 +60,11 @@ jobs:
       - run: node --test tools/flowmap/replay.test.mjs
       - run: node --test tools/flowmap/contract-gate.test.mjs
       - run: node --test tools/flowmap/waves.test.mjs
+      # Phase H — two-contract gap closure: projection acceptance (H1) is covered
+      # by acceptance.test above; handoff content-falsifiability (H5) + the
+      # orchestrator driver / worktree isolation (H4).
+      - run: node --test tools/flowmap/handoff-fresh.test.mjs
+      - run: node --test tools/flowmap/orchestrate.test.mjs
 
   # Drift gate for THIS repo's own map. Regenerates the bundle from the
   # per-folder fragments and fails if:

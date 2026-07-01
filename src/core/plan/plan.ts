@@ -105,6 +105,12 @@ export interface Plan {
   base: string;
   phases?: PlanPhase[];
   changes: PlanChange[];
+  /**
+   * The human's per-change review decisions (H2). Written by the editor on
+   * approve into the decision artifact (approved-plan.json) and consumed by
+   * approve-export.mjs --accepted-only. Optional: absent until a review lands.
+   */
+  verdicts?: Record<string, Verdict>;
 }
 
 /* ---------- pure helpers ---------- */
@@ -141,6 +147,16 @@ export function normalizePlan(raw: unknown): Plan {
         else delete c.fm;
         return c;
       });
+  }
+  // Preserve a decision artifact's verdicts on reload (H2): a reloaded
+  // approved-plan.json keeps the human's accept/reject decisions. Only valid
+  // verdict values survive; anything else is dropped (never throws).
+  if (p.verdicts && typeof p.verdicts === 'object') {
+    const v: Record<string, Verdict> = {};
+    for (const [id, val] of Object.entries(p.verdicts as Record<string, unknown>)) {
+      if (val === 'accept' || val === 'reject') v[id] = val;
+    }
+    if (Object.keys(v).length) out.verdicts = v;
   }
   return out;
 }

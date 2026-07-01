@@ -239,6 +239,51 @@
         { "kind": "cmd", "run": "node --test tools/flowmap/waves.test.mjs" },
         { "kind": "cmd", "run": "node tools/flowmap/replay.mjs --task \"node tools/flowmap/waves.mjs --plan public/plan.json --json\" --n 5" }
       ]
+    },
+    {
+      "id": "H1", "phase": "H", "title": "Behavioural contract for ctx/DOM-bound code (acceptance projection)",
+      "intent": "Keystone-2 widened: acceptance cases can carry kind:'projection' — a JSON fixture (ctx-substitute) + a pure projection lens — so DOM/ctx-bound behaviour can be proven, not only pure exported functions. Closes the gap where 16/17 changes were shape-only (PASS_UNPROVEN). Determinism preserved (inert JSON + Function-constructed expressions, replayable).",
+      "checks": [
+        { "kind": "file", "path": "tools/buildspec/acceptance.mjs" },
+        { "kind": "grep", "path": "tools/buildspec/acceptance.mjs", "pattern": "projection" },
+        { "kind": "cmd", "run": "node --test tools/buildspec/acceptance.test.mjs" }
+      ]
+    },
+    {
+      "id": "H2", "phase": "H", "title": "Editor emits the human decision artifact",
+      "intent": "On approve, the editor downloads approved-plan.json = {...plan, verdicts} (the human's accept/reject decisions as data), which the CLI approve-export.mjs consumes (--accepted-only) to mint the SAME contract bundle. The Plan type carries verdicts and normalizePlan preserves it. The AI->human->AI loop closes on a verifiable artifact, not an opaque .mmd.",
+      "checks": [
+        { "kind": "grep", "path": "src/panel/planner.ts", "pattern": "approved-plan.json" },
+        { "kind": "grep", "path": "src/core/plan/plan.ts", "pattern": "verdicts" },
+        { "kind": "cmd", "run": "node --test tools/flowmap/approve-export.test.mjs" }
+      ]
+    },
+    {
+      "id": "H3", "phase": "H", "title": "verify-change --strict (no silent over-trust)",
+      "intent": "PASS_UNPROVEN must not exit 0 like PASS. --strict makes the exit code require verdict==='PASS'; the JSON body is byte-identical in both modes. Removes the over-trust trap a downstream orchestrator would otherwise inherit from the exit code.",
+      "checks": [
+        { "kind": "grep", "path": "tools/flowmap/verify-change.mjs", "pattern": "--strict" },
+        { "kind": "cmd", "run": "node --test tools/flowmap/verify-change.test.mjs" },
+        { "kind": "cmd", "run": "node tools/flowmap/verify-change.mjs --change frame-transform --json --strict" }
+      ]
+    },
+    {
+      "id": "H4", "phase": "H", "title": "Orchestrator driver + per-change worktree isolation (flowmap:orchestrate)",
+      "intent": "The autonomous driver that runs the spine: route to waves.mjs for the dispatchable set, emit each change's contract, isolate it in a git worktree, collect its (strict-aware) verify-change verdict, and emit a canonical content-hashed summary. Byte-deterministic stdout (no time/random/paths), proven by replay. Turns the per-task contract into an actually-run fan-out.",
+      "checks": [
+        { "kind": "file", "path": "tools/flowmap/orchestrate.mjs" },
+        { "kind": "cmd", "run": "node --test tools/flowmap/orchestrate.test.mjs" },
+        { "kind": "cmd", "run": "node tools/flowmap/replay.mjs --task \"node tools/flowmap/orchestrate.mjs --plan public/plan.json --json\" --n 5" }
+      ]
+    },
+    {
+      "id": "H5", "phase": "H", "title": "Handoff content-falsifiability (claims, not just mtime)",
+      "intent": "handoff:check is extended past the mtime comparison to fail on a machine-falsifiable content claim: a 'Not yet committed' assertion about files git shows as committed exits 1. A handoff can no longer pass its own freshness gate while asserting a falsehood.",
+      "checks": [
+        { "kind": "grep", "path": "tools/flowmap/handoff-fresh.mjs", "pattern": "checkContentClaims" },
+        { "kind": "cmd", "run": "node --test tools/flowmap/handoff-fresh.test.mjs" },
+        { "kind": "cmd", "run": "npm run --silent flowmap:handoff:check" }
+      ]
     }
   ],
   "solidPieces": [

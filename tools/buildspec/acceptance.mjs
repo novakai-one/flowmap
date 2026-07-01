@@ -29,6 +29,22 @@
    The symbol under test is the change's target node id, resolved to a real
    export via the map's `%% src <id> <path>#<symbol>` directive.
 
+   CASE KINDS (H1 — widen Keystone-2 beyond pure functions):
+     • "pure" (default): deepStrictEqual(fn(...args), equals).
+     • "projection": for ctx/DOM-bound logic factored to take a plain
+       ctx-slice arg. The case adds a "projection" lens — a PURE expression
+       string of the form "(result, args) => <slice>" — and the runner
+       compares lens(fn(...args), args) to `equals`. This lets a function
+       that returns a large object (assert only a slice) or mutates a
+       plain-object arg (assert `args[i]` post-call) carry a behavioural
+       contract WITHOUT a DOM. The lens is built with `new Function` (an
+       expression, never statements) and must be pure — no Date.now /
+       Math.random / external refs — so the run stays byte-deterministic
+       (replayable). No jsdom, no real DOM, ever.
+         { "name": "clamps to readable zoom", "kind": "projection",
+           "args": [{ "w": 200, "h": 100, "x": 100, "y": 100 }, 800, 600, 10, 0.15, 3],
+           "projection": "(result) => result.z", "equals": 3 }
+
    Usage:
      node acceptance.mjs --plan <plan.json> [--map docs/flowmap/_bundle.mmd] [--json]
    Exit: 0 = all behavioural cases pass, 1 = a case failed (red / not done),
@@ -81,6 +97,8 @@ export function collectCases(plan, srcMap) {
         path: src?.path ?? null,
         symbol: src?.symbol ?? ref,
         name: cs.name || `${ref} case`,
+        kind: cs.kind === 'projection' ? 'projection' : 'pure',
+        projection: typeof cs.projection === 'string' ? cs.projection : null,
         args: Array.isArray(cs.args) ? cs.args : [],
         equals: cs.equals,
       });
@@ -92,6 +110,10 @@ export function collectCases(plan, srcMap) {
 // Subprocess: imports each referenced symbol from its real .ts source (with a
 // resolve hook for extensionless imports), runs every case with deepStrictEqual,
 // and prints results. A missing/throwing symbol => that case fails (not crash).
+// kind:'projection' cases apply a pure `new Function` lens to the result+args
+// before comparing, so ctx/DOM-bound logic factored to plain data is testable.
+// `await` wraps the call so sync AND async symbols both work (await of a
+// non-Promise is a no-op). No DOM is ever constructed; the lens must be pure.
 const SUBPROCESS = `
 import { registerHooks } from 'node:module';
 import { existsSync } from 'node:fs';
@@ -122,11 +144,22 @@ for (const c of cases) {
     const mod = modCache.get(abs);
     const fn = mod[c.symbol];
     if (typeof fn !== 'function') throw new Error('export ' + c.symbol + ' is not a function (unimplemented?)');
-    const got = fn(...c.args);
-    assert.deepStrictEqual(got, c.equals);
+    const got = await fn(...c.args);
+    if (c.kind === 'projection') {
+      if (typeof c.projection !== 'string' || !c.projection.trim())
+        throw new Error('projection case "' + c.name + '" has no projection lens (expected "(result, args) => <slice>")');
+      let lens;
+      try { lens = (new Function('return (' + c.projection + ')'))(); }
+      catch (le) { throw new Error('projection lens is not a valid expression: ' + String(le && le.message || le)); }
+      if (typeof lens !== 'function') throw new Error('projection lens must evaluate to a function');
+      const projected = await lens(got, c.args);
+      assert.deepStrictEqual(projected, c.equals);
+    } else {
+      assert.deepStrictEqual(got, c.equals);
+    }
     results.push({ id: c.id, name: c.name, pass: true });
   } catch (e) {
-    results.push({ id: c.id, name: c.name, pass: false, error: String(e && e.message || e).split('\\n')[0].slice(0, 200) });
+    results.push({ id: c.id, name: c.name, pass: false, error: String(e && e.message || e).split('\\n')[0].slice(0, 500) });
   }
 }
 console.log(JSON.stringify(results));
