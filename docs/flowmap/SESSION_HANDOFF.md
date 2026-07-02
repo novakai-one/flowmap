@@ -20,6 +20,35 @@ npm run flowmap:quiz -- generate --n 12 --seed 1
 npm run flowmap:quiz -- check --answers answers.json --seed 1   # 100% = handover trusted
 ```
 
+## 0·now (2026-07-02, this session) — UX-repair STAGE 4 LANDED: groups are first-class selectables (U6)
+
+Stage 4 of `docs/flowmap/plans/unfold-ux-repair.md` executed per protocol (onboard ✓, quiz 12/12 ✓,
+plan approved by Chris, Chrome-MCP browser-verified). Commit `53c32a6` (code+map) + this log. Each row runnable.
+
+| What | Verify it yourself | Expect |
+|---|---|---|
+| Two new gated keystones exist at the planned symbols | `grep -n "function selectGroup\|function groupConns" src/panel/unfold.ts` | both present (named closures) |
+| Both are in the shipped map with gated signatures | `grep -c "%% src unfold__uf\(SelectGroup\|GroupConns\) " docs/flowmap/_bundle.mmd` | 2 |
+| Map true + complete + in sync | `npm run flowmap:ship` | DONE line, 0 unaccounted (325 edges) |
+| Suite green · typecheck clean | `npm run spec:test:all` · `npm run typecheck` | 166/166 · exit 0 |
+| Selection ≠ expansion for groups | `npm run dev` → Read → click a region header (e.g. "Rendering & viewport") | selects (ring + GROUP inspector: derived role, contains(n), aggregated uses→/←used-by with weights); chevron folds without selecting; collapsed group card selects; ⤢/dblclick expands |
+| Aggregation grammar = stage pills | select a nested group; read "uses →" | sibling groups stay themselves; foreign subtrees compress to their top group (`proxyTargetOf` reuse) |
+| Blast honours the group | blast layer ON → select a group | ripple seeds from the whole subtree; members stay lit; no full-canvas dim |
+| Regressions held | module card click still stages; wire click still selects; ← explore / Esc chain / layer-toggle stage refresh unchanged | per stages 1–3 |
+| Stage log is the fine-grained record | `sed -n '/stage 4 · 53c32a6/p' docs/flowmap/plans/unfold-ux-repair.md` | one line: verified behaviors + notes |
+
+**Honest boundaries (do not oversell):**
+- Group selection deliberately does NOT promote to stage — that is U8 (**stage 5, design-first, still open**). `select()` was refactored to `selectGroup()` + the unchanged stage-entry tail; module-card staging is byte-equivalent behavior.
+- The two keystones are closure functions gated at `file#symbol`, structure-only (ctx/DOM-bound; E2/H1 factor-to-pure applies if contracts are wanted). `groupConns` is *near*-pure over closure state — a factor-to-pure candidate.
+- Expanded-module-header selection shares the exact code path verified live on hier groups, but was not clicked live (the loaded 41-module map has no drilled module children).
+- dblclick-on-header fires select→deselect before folding — the pre-existing cardEl click/dblclick pattern, kept for consistency.
+- Stage-mode wire-click noop (stage-3 gap) remains open.
+
+**Next (Scenario 1):** UX-repair **stage 5 (U8)** — selection promotes to main stage: produce an interaction
+design proposal for Chris BEFORE any code (his register entry flags possible over-optimisation). Also open:
+`read-review-overlay` (POSTPONED by verdict), the unfold-as-primary flip (P1, unblocked, Chris's call),
+stage-mode wire-click noop.
+
 ## 0a. HUMAN DESIGN VERDICTS + NEW PRIORITIES (2026-07-02 pm, from Chris) — read before building anything
 
 > **UPDATE (2026-07-02 later): second design review after Claude Code session. New staged UX-repair
