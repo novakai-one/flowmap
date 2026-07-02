@@ -103,6 +103,14 @@ flowchart LR
 %% fm:meta ufTypeFocus i0.accepts=t: string | null
 %% fm:meta ufTypeFocus i0.returns=void
 
+%% src ufCommit src/panel/unfold.ts#commit
+%% kind ufCommit function
+%% fm:meta ufCommit name=commit
+%% fm:meta ufCommit desc=the ONLY view-mutation entry (M3): apply the pure reduceView to the spec, install the result frozen, then paint the per-action render subset — no handler touches view state or the DOM directly
+%% fm:meta ufCommit i0.name=commit
+%% fm:meta ufCommit i0.accepts=a: ViewAction
+%% fm:meta ufCommit i0.returns=void
+
 %% src ufSelectSync src/panel/unfold.ts#selectSync
 %% kind ufSelectSync function
 %% fm:meta ufSelectSync name=selectSync
@@ -114,7 +122,7 @@ flowchart LR
 %% src ufPersistView src/panel/unfold.ts#persistView
 %% kind ufPersistView function
 %% fm:meta ufPersistView name=persistView
-%% fm:meta ufPersistView desc=the reading session (expanded/hidden/layers) persists per diagram — sorted containment roots as identity — restored on open; a never-read diagram still arrives fully folded, all layers off
+%% fm:meta ufPersistView desc=the reading session persists per diagram (sorted containment roots as identity) as the full v1 ViewSpec; load goes through normalizeViewSpec and applies the durable trio (expanded/hidden/layers) — a pre-M3 stored entry is a valid subset, migration is branch-free
 %% fm:meta ufPersistView i0.name=persistView
 %% fm:meta ufPersistView i0.accepts=dir: 'save' | 'load'
 %% fm:meta ufPersistView i0.returns=void
@@ -222,6 +230,7 @@ flowchart LR
     ufTrustLayer("trustLayer")
   end
   subgraph uf_session ["Session + write-through"]
+    ufCommit("commit")
     ufSelectSync("selectSync")
     ufPersistView("persistView")
     ufRenameInPlace("renameInPlace")
@@ -252,6 +261,9 @@ flowchart LR
   initUnfold --> ufComputeBlast
   initUnfold --> ufRenderInspector
   initUnfold --> ufTrustLayer
+  initUnfold --> ufCommit
+  ufCommit --> ufRenderCanvas
+  ufCommit --> ufFocusDim
   initUnfold --> ufSelectSync
   initUnfold --> ufPersistView
   initUnfold --> ufRenameInPlace

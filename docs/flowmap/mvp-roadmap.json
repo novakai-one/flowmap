@@ -48,8 +48,13 @@
       "id": "M3", "phase": "P2", "title": "ViewSpec contract",
       "intent": "Serializable ViewSpec JSON; renderer = pure function of spec; checkboxes and future LLM both write same spec. Every migrated feature lands as render(spec), no direct DOM-toggle handlers.",
       "checks": [
-        { "kind": "cmd", "run": "grep -rq ViewSpec src --include=*.ts" },
-        { "kind": "manual", "note": "Schema validated + render purity confirmed in review." }
+        { "kind": "file", "path": "docs/flowmap/m3-viewspec-design.md", "minBytes": 2000 },
+        { "kind": "grep", "path": "src/core/viewspec/viewspec.ts", "pattern": "export interface ViewSpec" },
+        { "kind": "grep", "path": "src/panel/unfold.ts", "pattern": "normalizeViewSpec\\(", "count": 2 },
+        { "kind": "grep", "path": "src/panel/unfold.ts", "pattern": "reduceView\\(" },
+        { "kind": "cmd", "run": "! grep -qE 'let (SEL|SELW|QUERY|STAGE|FOCUS_TYPE|FM_OPEN)' src/panel/unfold.ts" },
+        { "kind": "cmd", "run": "npm run flowmap:acceptance -- --plan docs/flowmap/plans/m3-viewspec.plan.json" },
+        { "kind": "cmd", "run": "node tools/buildspec/run-bundled-test.mjs tools/buildspec/viewspec.test.mjs" }
       ]
     },
     {

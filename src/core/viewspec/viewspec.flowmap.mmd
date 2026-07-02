@@ -1,0 +1,63 @@
+flowchart LR
+%% root viewspec
+
+%% src ViewSpec src/core/viewspec/viewspec.ts#ViewSpec
+%% kind ViewSpec type
+%% fm:meta ViewSpec name=ViewSpec
+%% fm:meta ViewSpec desc=serializable reading-view contract (M3): one plain-JSON object determines WHAT is on screen — screen = render(spec); checkboxes and a future LLM write the same object
+
+%% src ViewAction src/core/viewspec/viewspec.ts#ViewAction
+%% kind ViewAction type
+%% fm:meta ViewAction name=ViewAction
+%% fm:meta ViewAction desc=the closed set of view mutations: toggleExpand, reveal, hide, select, selectWire, focusType, setStage, toggleLayer, setQuery, setFmOpen, foldAll
+
+%% src ViewModelIndex src/core/viewspec/viewspec.ts#ViewModelIndex
+%% kind ViewModelIndex type
+%% fm:meta ViewModelIndex name=ViewModelIndex
+%% fm:meta ViewModelIndex desc=plain-data containment slice the reducer consults: parents, children, roots — JSON-expressible so acceptance cases can carry it
+
+%% src emptyViewSpec src/core/viewspec/viewspec.ts#emptyViewSpec
+%% kind emptyViewSpec function
+%% fm:meta emptyViewSpec name=emptyViewSpec
+%% fm:meta emptyViewSpec desc=the fresh-view spec: fully folded, nothing hidden or selected, calls layer ON (approved decision: wires are the story, never an opt-in)
+%% fm:meta emptyViewSpec i0.name=emptyViewSpec
+%% fm:meta emptyViewSpec i0.returns=ViewSpec
+
+%% src normalizeViewSpec src/core/viewspec/viewspec.ts#normalizeViewSpec
+%% kind normalizeViewSpec function
+%% fm:meta normalizeViewSpec name=normalizeViewSpec
+%% fm:meta normalizeViewSpec desc=tolerant schema boundary: coerce unknown JSON (a full v1 spec, the legacy expanded/hidden/layers shape, or garbage) into a valid ViewSpec field-by-field; a known-id list confines the spec to a real model; idempotent on a valid spec
+%% fm:meta normalizeViewSpec i0.name=normalizeViewSpec
+%% fm:meta normalizeViewSpec i0.accepts=raw: unknown
+%% fm:meta normalizeViewSpec i0.accepts=known: string[] | null
+%% fm:meta normalizeViewSpec i0.returns=ViewSpec
+
+%% src reduceView src/core/viewspec/viewspec.ts#reduceView
+%% kind reduceView function
+%% fm:meta reduceView name=reduceView
+%% fm:meta reduceView desc=pure view reducer — returns a NEW spec, never mutates its (possibly frozen) input; centralizes the invariants: collapse folds descendants, reveal unhides the chain, last-visible-root hide guard, sel/selWire/focusType/fmOpen mutual exclusions, stage invalidates selWire
+%% fm:meta reduceView i0.name=reduceView
+%% fm:meta reduceView i0.accepts=spec: ViewSpec
+%% fm:meta reduceView i0.accepts=action: ViewAction
+%% fm:meta reduceView i0.accepts=model: ViewModelIndex
+%% fm:meta reduceView i0.returns=ViewSpec
+
+%% parent vs_shapes viewspec
+%% parent vs_ops viewspec
+
+  subgraph vs_shapes ["View contract shapes"]
+    ViewSpec>"ViewSpec"]
+    ViewAction>"ViewAction"]
+    ViewModelIndex>"ViewModelIndex"]
+  end
+  subgraph vs_ops ["Pure operations"]
+    emptyViewSpec("emptyViewSpec")
+    normalizeViewSpec("normalizeViewSpec")
+    reduceView("reduceView")
+  end
+
+  normalizeViewSpec --> emptyViewSpec
+  normalizeViewSpec -.->|returns| ViewSpec
+  reduceView -.->|reads + returns| ViewSpec
+  reduceView -.->|applies| ViewAction
+  reduceView -.->|consults| ViewModelIndex
