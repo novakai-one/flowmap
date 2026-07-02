@@ -64,6 +64,8 @@ bug that had been failing `spec-gate` on main invisibly. Each row runnable.
 
 | **F-14** | `orchestrate`’s only blocking check was data-dependent on the live `public/plan.json` (if that plan ever became fully built, the exit-1 path would go unexercised): a fixture plan adding a node whose symbol can never exist now proves exit 1 UNCONDITIONALLY — dispatched in wave 0, verdict FAIL, summary.fail 1, exit 1 | `node --test tools/flowmap/orchestrate.test.mjs` → 7/7 · plan: `docs/flowmap/plans/aud5-f14.plan.json` |
 
+| (live flake) | **atomic bundle writes** — F-09 put `onboard.test.mjs` (which reruns `flowmap:verify`, rewriting `_bundle.mmd` via shell redirect) into the suite; a parallel `edge-verify.test.mjs` could read the torn file and fail CI randomly (seen on PR #16, pull_request run only: `import-backed edges too few: 0`). `flowmap:bundle` + `flowmap:tooling:bundle` now write `.tmp` then `mv` (atomic on the same fs) — readers see old or new bytes, never a torn map | `grep -c "mv docs/flowmap/_bundle.mmd.tmp" package.json` → 1 · `npm run flowmap:bundle && git status --short docs/flowmap/` → clean |
+
 **All five register keystones are fixed** (F-19 + F-01…F-04), and the gap wave has begun (F-05,
 F-06, F-07, F-08, F-09, F-10, F-11, F-12, F-13, F-14 landed). Remaining: gap F-15, hygiene F-16…F-18 — S-cost, mostly
 test-authoring; order and repros in `04-findings.md`.
