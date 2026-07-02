@@ -144,3 +144,56 @@ test('M2b: BOTH check outcomes are metered (pass rate = attempts, not just passe
     assert.match(checks[1].mapHash, /^[0-9a-f]{64}$/, 'provenance rides along');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+/* ---------- onboard-cost item 4 (session-bound pass; design:
+   docs/flowmap/onboard-cost-design.md) ---------- */
+
+test('session: check records --session (flag beats env; neither -> null)', () => {
+  const dir = mkfixture();
+  try {
+    const qs = generate(dir).questions;
+    const right = Object.fromEntries(qs.map((q) => [q.id, answerFor(q.prompt, q.ref)]));
+    writeFileSync(join(dir, 'answers.json'), JSON.stringify(right));
+
+    const run = (extra, env) => spawnSync('node',
+      [CLI, 'check', '--answers', 'answers.json', ...MAP_ARGS, ...extra],
+      { cwd: dir, encoding: 'utf8', env: { ...process.env, FLOWMAP_ROOT: dir, ...env } });
+
+    assert.equal(run(['--session', 'flag-sess'], { CLAUDE_CODE_SESSION_ID: 'env-sess' }).status, 0);
+    assert.equal(JSON.parse(readFileSync(join(dir, '.flowmap-quiz-pass.json'), 'utf8')).session, 'flag-sess',
+      'the explicit flag must beat the env');
+
+    assert.equal(run([], { CLAUDE_CODE_SESSION_ID: 'env-sess' }).status, 0);
+    assert.equal(JSON.parse(readFileSync(join(dir, '.flowmap-quiz-pass.json'), 'utf8')).session, 'env-sess',
+      'the harness env is the default identity');
+
+    assert.equal(run([], { CLAUDE_CODE_SESSION_ID: '' }).status, 0);
+    assert.equal(JSON.parse(readFileSync(join(dir, '.flowmap-quiz-pass.json'), 'utf8')).session, null,
+      'no flag and no env -> null (manual CLI, documented boundary)');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('session: verify --session matches / mismatches / legacy artifact; flagless stays hash-only', () => {
+  const dir = mkfixture();
+  try {
+    const qs = generate(dir).questions;
+    const right = Object.fromEntries(qs.map((q) => [q.id, answerFor(q.prompt, q.ref)]));
+    writeFileSync(join(dir, 'answers.json'), JSON.stringify(right));
+    assert.equal(quiz(dir, ['check', '--answers', 'answers.json', ...MAP_ARGS, '--session', 'sess-A']).status, 0);
+
+    assert.equal(quiz(dir, ['verify', '--map', 'map.mmd', '--session', 'sess-A']).status, 0,
+      'matching session -> verified');
+    const mm = quiz(dir, ['verify', '--map', 'map.mmd', '--session', 'sess-B']);
+    assert.equal(mm.status, 1, 'another session cannot claim this pass');
+    assert.match(mm.stdout, /session/i);
+    assert.equal(quiz(dir, ['verify', '--map', 'map.mmd']).status, 0,
+      'flagless verify stays hash-only (manual CLI / CI, documented boundary)');
+
+    // legacy / anonymous artifact: correct hash but no session field
+    const pass = JSON.parse(readFileSync(join(dir, '.flowmap-quiz-pass.json'), 'utf8'));
+    delete pass.session;
+    writeFileSync(join(dir, '.flowmap-quiz-pass.json'), JSON.stringify(pass));
+    assert.equal(quiz(dir, ['verify', '--map', 'map.mmd', '--session', 'sess-A']).status, 1,
+      'an anonymous pass cannot be claimed by a session (fail closed)');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

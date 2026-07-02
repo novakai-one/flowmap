@@ -27,13 +27,28 @@
    pass non-transferable across map changes, which is the replay that
    mattered (AUD2 A4).
 
+   Onboard-cost item 4 (design: docs/flowmap/onboard-cost-design.md) — the
+   pass becomes SESSION-BOUND, so one agent's pass cannot attest another
+   agent's understanding (the checkout-scoped artifact let any subagent's
+   pass unlock the orchestrator's src/ edits). `check` records the session
+   identity: --session flag, else CLAUDE_CODE_SESSION_ID env (the harness
+   sets it for tool-run commands and it equals the PreToolUse payload's
+   session_id), else null. `verify` enforces it ONLY when --session is
+   passed explicitly — never implicitly from env — so manual CLI runs and
+   CI keep deterministic hash-only semantics (the documented no-session
+   boundary: outside a harness session there is no identity to bind; the
+   enforcement point is edit-gate, which always has the payload id). Under
+   the flag, an artifact whose session differs — another id, null, or a
+   pre-binding artifact — fails closed with a re-take reason.
+
    Usage:
      node quiz.mjs generate [--n 12] [--seed 0] [--out questions.json]
-     node quiz.mjs check --answers <answers.json> [--n 12] [--seed 0]
-     node quiz.mjs verify [--map <map.mmd>]
+     node quiz.mjs check --answers <answers.json> [--n 12] [--seed 0] [--session <id>]
+     node quiz.mjs verify [--map <map.mmd>] [--session <id>]
    answers.json: { "<qid>": "<answer>", ... }
    Exit (check): 0 = all correct, 1 = wrong answer(s), 2 = bad invocation.
-   Exit (verify): 0 = a 100% pass exists for the CURRENT map bytes, 1 = not.
+   Exit (verify): 0 = a 100% pass exists for the CURRENT map bytes (and the
+   CURRENT session when --session is given), 1 = not.
    ===================================================================== */
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -52,6 +67,10 @@ const CMD = process.argv[2];
 const MAP = arg('--map', 'docs/flowmap/_bundle.mmd');
 const N = parseInt(arg('--n', '12'), 10);
 const SEED = parseInt(arg('--seed', '0'), 10);
+// The explicit flag is the only thing that ACTIVATES session checking in
+// `verify`; `check` additionally falls back to the harness env for recording.
+const SESSION_FLAG = arg('--session', null);
+const SESSION_ID = SESSION_FLAG ?? (process.env.CLAUDE_CODE_SESSION_ID || null);
 
 const PASS_FILE = resolve('.flowmap-quiz-pass.json');
 const mapHash = () => sha256hex(readFileSync(resolve(MAP)));
@@ -186,7 +205,7 @@ if (CMD === 'check') {
   if (correct === qs.length) {
     // F-03: bind the pass to the exact map bytes it was scored against, so
     // `verify` can prove it later and any map change invalidates it.
-    writeFileSync(PASS_FILE, JSON.stringify({ map: MAP, seed: SEED, n: qs.length, score: `${correct}/${qs.length}`, mapHash: mapHash() }, null, 2) + '\n');
+    writeFileSync(PASS_FILE, JSON.stringify({ map: MAP, seed: SEED, n: qs.length, score: `${correct}/${qs.length}`, mapHash: mapHash(), session: SESSION_ID }, null, 2) + '\n');
     console.log('UNDERSTANDING VERIFIED — handover trusted.');
     console.log(`pass artifact written: ${PASS_FILE} (bound to the current map hash; verify with: quiz.mjs verify)`);
     process.exit(0);
@@ -207,6 +226,11 @@ if (CMD === 'verify') {
   if (got !== of) { console.log(`✗ recorded score is ${pass.score}, not a full pass — re-run the quiz.`); process.exit(1); }
   if (pass.mapHash !== mapHash()) {
     console.log('✗ quiz pass is STALE — the map changed since it was scored. Re-read the map and re-take the quiz.');
+    process.exit(1);
+  }
+  // Item 4: session binding — enforced only under the explicit flag (see header).
+  if (SESSION_FLAG !== null && pass.session !== SESSION_FLAG) {
+    console.log('✗ quiz pass belongs to another session (or predates session binding) — this agent has not proven its own read. Re-take the quiz in THIS session (onboard STEP 4).');
     process.exit(1);
   }
   console.log(`✓ quiz pass VERIFIED for the current map (seed ${pass.seed}, ${pass.score}).`);
