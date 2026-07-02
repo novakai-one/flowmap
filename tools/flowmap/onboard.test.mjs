@@ -11,6 +11,14 @@
    NOTE: this spawns the real onboard (flowmap:verify + roadmap), so it is
    the slowest test in the suite — one spawn, all assertions share it.
    Deny-side smoke tests (stale map => exit 1) are F-17's scope.
+
+   FLOWMAP_ROADMAP_SKIP_CMD: onboard's STEP 6 roadmap normally executes the
+   roadmap.json cmd predicates — which spawn gate tools (incl. orchestrate
+   with git worktrees) CONCURRENTLY with the rest of this suite and race it
+   (seen in CI: a parallel orchestrate's worktree tripped orchestrate.test's
+   cleanup assertion). Skipping cmds here only DOWNGRADES statuses
+   (built -> partial, per roadmap.mjs); every file/grep predicate and every
+   onboard step still runs for real.
    ===================================================================== */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,7 +30,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
 
 const r = spawnSync('node', [join('tools', 'flowmap', 'onboard.mjs')],
-  { cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 300_000 });
+  { cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 300_000,
+    env: { ...process.env, FLOWMAP_ROADMAP_SKIP_CMD: '1' } });
 
 test('onboard exits 0 on the real repo (the map at HEAD is trustworthy)', () => {
   assert.equal(r.status, 0, `onboard failed:\n${r.stdout}\n${r.stderr}`);
