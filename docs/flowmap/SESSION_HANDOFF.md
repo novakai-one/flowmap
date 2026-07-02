@@ -56,8 +56,10 @@ bug that had been failing `spec-gate` on main invisibly. Each row runnable.
 
 | **F-10** | the mutation-blind gate CLIs get their first spawn tests (AUD3 T4: `gate.mjs` was spawned by zero tests; plan-check / plan-cert / flowmap-lint were fn-only): `cli-wiring.test.mjs` spawns each real CLI — gate in-sync → 0 / drift → 1 / no args → 2; plan-check incoherent → 1 / unreadable → 2 / real plan → 0; plan-cert usage errors → 2 (good path already spawned by loop-e2e); flowmap-lint flat-mirror → 1 / no path → 2 / real bundle → 0. `handoff-fresh` was covered by F-02 | `node --test tools/flowmap/cli-wiring.test.mjs` → 6/6 · plan: `docs/flowmap/plans/aud5-f10.plan.json` |
 
+| **F-11** | the A1 completeness pair and the grammar gate get their first deny fixtures (AUD3 T6: their exit-1 claims were proven only by running on good data): `coverage.mjs` uncovered file → 1 / covered → 0; `exports-coverage.mjs` hidden export → 1 / allowlisted → 0 (real ts-morph fixture project); `validate.mjs` edge-to-undefined-node → 1 / valid → 0 / no arg → 2 — all via the real spawned CLIs in `completeness.test.mjs` (in the suite) | `node --test tools/flowmap/completeness.test.mjs` → 3/3 · plan: `docs/flowmap/plans/aud5-f11.plan.json` |
+
 **All five register keystones are fixed** (F-19 + F-01…F-04), and the gap wave has begun (F-05,
-F-06, F-07, F-08, F-09, F-10 landed). Remaining: gaps F-11…F-15, hygiene F-16…F-18 — S-cost, mostly
+F-06, F-07, F-08, F-09, F-10, F-11 landed). Remaining: gaps F-12…F-15, hygiene F-16…F-18 — S-cost, mostly
 test-authoring; order and repros in `04-findings.md`.
 
 ## 0·prev·aud4 (2026-07-02, this session, continued) — AUD4 LANDED: findings register, A7 RESOLVED (5 of 6 audit phases)
