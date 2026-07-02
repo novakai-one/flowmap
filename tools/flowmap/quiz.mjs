@@ -85,13 +85,20 @@ const SESSION_ID = SESSION_FLAG ?? (process.env.CLAUDE_CODE_SESSION_ID || null);
 // Onboard-cost item 2: verify a single src file against its module's fragment
 // hash + its direct edge-neighbours' hashes, instead of the whole bundle.
 const FILE_FLAG = arg('--file', null);
+// Onboard-cost item 3: scoped quiz — questions drawn only from the named
+// modules; the pass then unlocks edits only inside that proven scope.
+const SCOPE_FLAG = arg('--scope', null);
+const SCOPE = SCOPE_FLAG ? SCOPE_FLAG.split(',').map((s) => s.trim()).filter(Boolean) : null;
 
 const PASS_FILE = resolve('.flowmap-quiz-pass.json');
 const mapHash = () => sha256hex(readFileSync(resolve(MAP)));
 
 const mapText = readFileSync(resolve(MAP), 'utf8');
 const model = parseMmd(mapText);
-const realIds = Object.keys(model.nodes).filter((id) => !model.nodes[id].group).sort();
+const allIds = Object.keys(model.nodes).filter((id) => !model.nodes[id].group).sort();
+const realIds = SCOPE
+  ? allIds.filter((id) => SCOPE.includes(id.includes('__') ? id.split('__')[0] : id))
+  : allIds;
 
 const ownerOf = (id) => (id.includes('__') ? id.split('__')[0] : id);
 
@@ -217,6 +224,10 @@ function correctAnswer(q) {
 
 /* ---------- commands ---------- */
 if (CMD === 'generate') {
+  if (SCOPE && realIds.length === 0) {
+    console.error(`no map nodes are owned by scope [${SCOPE.join(', ')}] — check the module names against the map.`);
+    process.exit(2);
+  }
   const qs = buildQuestions();
   const out = arg('--out');
   const payload = {
@@ -275,9 +286,11 @@ if (CMD === 'check') {
     // F-03: bind the pass to the exact map bytes it was scored against, so
     // `verify` can prove it later and any map change invalidates it.
     const frags = discoverFragments();
+    // A scoped pass records no whole-map hash: it must satisfy --file verifies
+    // inside its scope and NEVER the full (flagless) verify.
     writeFileSync(PASS_FILE, JSON.stringify({
       v: 2, map: MAP, seed: SEED, n: qs.length, score: `${correct}/${qs.length}`,
-      mapHash: mapHash(), session: SESSION_ID, scope: 'all',
+      mapHash: SCOPE ? null : mapHash(), session: SESSION_ID, scope: SCOPE ?? 'all',
       fragments: Object.fromEntries(Object.entries(frags).map(([k, f]) => [k, f.hash])),
     }, null, 2) + '\n');
     console.log('UNDERSTANDING VERIFIED — handover trusted.');
@@ -327,6 +340,10 @@ if (CMD === 'verify') {
     }
     console.log(`✓ quiz pass VERIFIED for module "${mod}" and its edge-neighbours (seed ${pass.seed}, ${pass.score}).`);
     process.exit(0);
+  }
+  if (pass.scope && pass.scope !== 'all') {
+    console.log(`✗ this pass is scoped to [${[].concat(pass.scope).join(', ')}] — a full verify requires a full-map pass (onboard STEP 4, no --scope).`);
+    process.exit(1);
   }
   if (pass.mapHash !== mapHash()) {
     console.log('✗ quiz pass is STALE — the map changed since it was scored. Re-read the map and re-take the quiz.');

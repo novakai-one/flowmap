@@ -328,3 +328,59 @@ test('verify --file on a pre-fragment (v1) artifact falls back to whole-map sema
       'a v1 artifact keeps its original any-change-invalidates guarantee');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+/* ---------- onboard-cost item 3 (scoped quiz; design:
+   docs/flowmap/onboard-cost-design.md) ---------- */
+
+test('scope: generate --scope draws only in-scope questions; check records the scope', () => {
+  const dir = mkfixture2();
+  try {
+    const r = quiz(dir, ['generate', '--map', 'map.mmd', '--n', '4', '--seed', '1', '--scope', 'camera', '--out', 'q.json']);
+    assert.equal(r.status, 0, r.stdout);
+    const qs = JSON.parse(readFileSync(join(dir, 'q.json'), 'utf8')).questions;
+    assert.ok(qs.length >= 1);
+    for (const q of qs) assert.match(q.ref, /^camera(__|$)/, `out-of-scope ref ${q.ref}`);
+    const right = Object.fromEntries(qs.map((q) => {
+      const f = FACTS2[q.ref];
+      let a;
+      if (q.prompt.startsWith('What is the node kind')) a = f.kind;
+      else if (q.prompt.startsWith('Which top-level module')) a = f.owner;
+      else if (q.prompt.startsWith('What is the drill-in parent')) a = f.parent;
+      else if (q.prompt.startsWith('How many parameters')) a = f.arity;
+      else a = f.returns;
+      return [q.id, a];
+    }));
+    writeFileSync(join(dir, 'answers.json'), JSON.stringify(right));
+    assert.equal(quiz(dir, ['check', '--answers', 'answers.json', '--map', 'map.mmd', '--n', '4', '--seed', '1', '--scope', 'camera']).status, 0);
+    const pass = readPass(dir);
+    assert.deepEqual(pass.scope, ['camera']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('scope: a scoped pass unlocks only its scope; it never satisfies a full verify', () => {
+  const dir = mkfixture2();
+  try {
+    const r = quiz(dir, ['generate', '--map', 'map.mmd', '--n', '4', '--seed', '1', '--scope', 'camera', '--out', 'q.json']);
+    assert.equal(r.status, 0, r.stdout);
+    const qs = JSON.parse(readFileSync(join(dir, 'q.json'), 'utf8')).questions;
+    const right = Object.fromEntries(qs.map((q) => {
+      const f = FACTS2[q.ref];
+      let a;
+      if (q.prompt.startsWith('What is the node kind')) a = f.kind;
+      else if (q.prompt.startsWith('Which top-level module')) a = f.owner;
+      else if (q.prompt.startsWith('What is the drill-in parent')) a = f.parent;
+      else if (q.prompt.startsWith('How many parameters')) a = f.arity;
+      else a = f.returns;
+      return [q.id, a];
+    }));
+    writeFileSync(join(dir, 'answers.json'), JSON.stringify(right));
+    assert.equal(quiz(dir, ['check', '--answers', 'answers.json', '--map', 'map.mmd', '--n', '4', '--seed', '1', '--scope', 'camera']).status, 0);
+    assert.equal(quiz(dir, ['verify', '--map', 'map.mmd', '--file', 'src/core/camera/camera.ts']).status, 0,
+      'in-scope module verifies');
+    const out = quiz(dir, ['verify', '--map', 'map.mmd', '--file', 'src/core/state/state.ts']);
+    assert.equal(out.status, 1, 'a module outside the proven scope must not verify');
+    assert.match(out.stdout, /scope/i);
+    assert.equal(quiz(dir, ['verify', '--map', 'map.mmd']).status, 1,
+      'a scoped pass must never satisfy the full (flagless) verify');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
