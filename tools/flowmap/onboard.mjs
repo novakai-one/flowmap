@@ -84,5 +84,22 @@ const road = run('npm run --silent flowmap:roadmap');
 if (road.ok) line(road.out.trimEnd().split('\n').slice(2).join('\n')); // skip the banner, show the phases
 line('');
 
+/* ---------- STEP 7: handoff freshness — surfaced at session START ----------
+   AUD5/F-09 (attack A8): the Stop-hook nudge fires only on a clean Stop, so a
+   crashed session never warns anyone the handoff lags the code. Session START
+   is crash-proof — whatever killed the last session, the next one onboards.
+   This is a NUDGE, not a gate: onboard's exit code stays about map trust;
+   F4 in CI (flowmap:handoff:check on flowmap-drift) is the hard backstop. */
+line('STEP 7 — is the handoff at least as fresh as the code? (crash-proof surface; F4 CI is the backstop):');
+const fresh = run('node tools/flowmap/handoff-fresh.mjs --check');
+if (fresh.ok) {
+  line('✓ HANDOFF FRESH — docs/flowmap/SESSION_HANDOFF.md is at least as fresh as the last code commit.\n');
+} else {
+  line('⚠ HANDOFF LAGS THE CODE — the last session ended (or crashed) without re-syncing:');
+  line('  ' + fresh.out.trim().split('\n').join('\n  '));
+  line('  Before building on this checkout: read the handoff as SUSPECT, derive state from the');
+  line('  commands (flowmap:status / flowmap:roadmap), and update the handoff with your session.\n');
+}
+
 line('Onboarding ready. The map is trustworthy; prove your read with STEP 4 before making design claims.');
 process.exit(0);
