@@ -47,6 +47,8 @@
     "flowmap:trust": "node tools/flowmap/trust-report.mjs",
     "flowmap:status": "node tools/flowmap/status.mjs",
     "flowmap:roadmap": "node tools/flowmap/roadmap.mjs",
+    "flowmap:audit": "node tools/flowmap/roadmap.mjs --roadmap docs/flowmap/audit/audit-roadmap.json",
+    "flowmap:audit:doc": "node tools/flowmap/roadmap.mjs --audit-doc docs/flowmap/audit/WORK_ORDER.md",
     "flowmap:roadmap:audit": "node tools/flowmap/roadmap.mjs --audit-doc CLAUDE.md",
     "flowmap:quiz": "node tools/flowmap/quiz.mjs",
     "flowmap:onboard": "node tools/flowmap/onboard.mjs",
