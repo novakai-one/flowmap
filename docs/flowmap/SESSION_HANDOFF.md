@@ -52,8 +52,10 @@ bug that had been failing `spec-gate` on main invisibly. Each row runnable.
 
 | **F-08** | the tooling-map chain's promised deny paths are exercised for the first time (AUD3 T5 was ALLOW-only): an UNMAPPED load-bearing module → exit 1, a DANGLING `%% src` → exit 1, an unresolvable `#symbol` → exit 1 — three CLI fixtures in `tooling-map.test.mjs` asserting the exact problem class in stdout; the CI half of the finding was closed by F-06 (spec:test:all contains the tooling-map suite, so the whole chain now runs in CI by construction) | `node --test tools/flowmap/tooling-map.test.mjs` → 8/8 · `grep -c 'spec:test:all' .github/workflows/spec-gate.yml` → ≥1 · plan: `docs/flowmap/plans/aud5-f08.plan.json` |
 
+| **F-09** | handoff staleness surfaces at session START, not only at clean Stop (attack A8: a crashed session never fires the Stop-hook nudge): `onboard` STEP 7 runs `handoff-fresh --check` and prints ✓ HANDOFF FRESH or ⚠ HANDOFF LAGS THE CODE + treat-as-suspect instructions — a nudge, not a gate (onboard's exit stays about map trust; F4 CI is the backstop); `onboard.test.mjs` (new, in the suite) is onboard's first test — **1 assertion red pre-fix** | `node --test tools/flowmap/onboard.test.mjs` → 2/2 · `npm run flowmap:onboard` → STEP 7 shows the live verdict · plan: `docs/flowmap/plans/aud5-f09.plan.json` |
+
 **All five register keystones are fixed** (F-19 + F-01…F-04), and the gap wave has begun (F-05,
-F-06, F-07, F-08 landed). Remaining: gaps F-09…F-15, hygiene F-16…F-18 — S-cost, mostly
+F-06, F-07, F-08, F-09 landed). Remaining: gaps F-10…F-15, hygiene F-16…F-18 — S-cost, mostly
 test-authoring; order and repros in `04-findings.md`.
 
 ## 0·prev·aud4 (2026-07-02, this session, continued) — AUD4 LANDED: findings register, A7 RESOLVED (5 of 6 audit phases)
