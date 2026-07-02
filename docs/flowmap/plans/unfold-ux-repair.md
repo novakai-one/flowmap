@@ -102,3 +102,4 @@ frontmatter change). `render()` has no stage branch.
 (append one line per completed stage: date · stage · commit · verify command)
 
 - 2026-07-02 · stage 0 · 224d466 · read findings above; verify: `grep -n "setPointerCapture" src/panel/unfold.ts` (no stagelayer exclusion), `grep -n "layers.calls" src/panel/unfold.ts` (absent in drawStageWires)
+- 2026-07-02 · stage 1 · c8f002c · gate green, tsc clean; verify in browser: drag over card text (no native selection), stage a group → click "← explore" (exits), fit/expand motion slower (.7s expo). U1 fix is the pointer-capture exclusion — real-mouse verify pending, logging unnecessary given confirmed mechanism.

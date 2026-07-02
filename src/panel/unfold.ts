@@ -443,6 +443,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     for (const id of [...expanded]) if (!U.has(id)) expanded.delete(id);
     for (const id of [...hidden]) if (!U.has(id)) hidden.delete(id);
     if (SEL && !U.has(SEL)) SEL = null;
+    if (STAGE && !U.has(STAGE)) { STAGE = null; overlay.classList.remove('staged'); }
   }
   const gu = (id: string): UNode => U.get(id) as UNode;
   const isContainer = (u: UNode | undefined): boolean => !!u && u.children.length > 0;
@@ -1020,6 +1021,29 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     setTimeout(drawStageWires, 60);
   }
 
+  /** U4: silent stage refresh — rebuild the projection from CURRENT view state
+      (layers, hidden, blast, selection) without replaying entrance transitions.
+      Called by render() so both projections subscribe to the same state. */
+  function refreshStage(): void {
+    if (!STAGE) return;
+    const u = U.get(STAGE);
+    if (!u || !u.children.some((c) => !hidden.has(c))) {
+      // staged container gone or emptied by reveal toggles — exit to explore
+      stageMode(null);
+      return;
+    }
+    renderStageGroup(undefined);
+    const settle = (el: HTMLElement): void => {
+      el.style.transition = 'none';
+      el.style.transitionDelay = '0ms';
+      el.style.opacity = '1';
+      setTimeout(() => { el.style.transition = ''; el.style.transitionDelay = ''; el.style.opacity = ''; }, 40);
+    };
+    const g = stageLayer.querySelector('.uf-sgroup') as HTMLElement | null;
+    if (g) settle(g);
+    stageLayer.querySelectorAll<HTMLElement>('.uf-proxy').forEach(settle);
+  }
+
   /** directional proxy pills: external edges aggregate per target container; angle = true angle between centroids.
       Edge-granularity honesty: cross-module edges in this model attach at MODULE level, so an edge incident to the
       staged container itself or its ancestor chain is FRAME-attributed (no child anchor) — without that a staged
@@ -1027,7 +1051,6 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   function stageProxies(): void {
     stageLayer.querySelectorAll('.uf-proxy').forEach((p) => p.remove());
     if (!STAGE) return;
-    const selStaged = SEL ? stageRepOf(SEL) : null;
     const frameIds = stageFrameIds();
     interface PLink { inside: string | null; outside: string }
     const byRoot = new Map<string, PLink[]>();
@@ -1037,7 +1060,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       if ((ra || frameIds.has(e.from)) && !rb && !frameIds.has(e.to)) { inside = ra; outside = e.to; }
       else if ((rb || frameIds.has(e.to)) && !ra && !frameIds.has(e.from)) { inside = rb; outside = e.from; }
       else continue;
-      if (selStaged && inside !== null && inside !== selStaged) continue;
+      // U3: pill set is STABLE across selection — selection is expressed in the wires, not by mutating the pills
       if (stageRepOf(outside)) continue; // inside the staged subtree after all
       const og = proxyTargetOf(outside, frameIds);
       if (!byRoot.has(og)) byRoot.set(og, []);
@@ -1124,6 +1147,8 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   function drawStageWires(): void {
     sWiresEl.innerHTML = '';
     if (!STAGE) return;
+    if (!layers.calls && !layers.deps) return;  // U3/U4: stage wires obey the same wire layers as the canvas
+    const wireOn = (e: UEdge): boolean => (e.call && layers.calls) || (e.dep && layers.deps);
     const sw = stageEl.clientWidth, sh = stageEl.clientHeight;
     sWiresEl.setAttribute('viewBox', `0 0 ${sw} ${sh}`);
     const sr = stageEl.getBoundingClientRect();
@@ -1132,13 +1157,14 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       pos[el.dataset.id as string] = el.getBoundingClientRect();
     });
     const edgeCol = cvar('--uf-dim') || '#948f84', selCol = cvar('--uf-accent') || '#4a6b8a';
+    // U3: a selection DIMS the other wires instead of erasing them — same grammar as drawWires
     const mkPath = (d: string, hot: boolean): SVGPathElement => {
       const p = document.createElementNS(NS, 'path');
       p.setAttribute('d', d);
       p.setAttribute('fill', 'none');
       p.setAttribute('stroke', hot ? selCol : edgeCol);
       p.setAttribute('stroke-width', hot ? '1.8' : '1.2');
-      p.setAttribute('stroke-opacity', hot ? '.95' : '.5');
+      p.setAttribute('stroke-opacity', hot ? '.95' : SEL ? '.16' : '.5');
       p.setAttribute('stroke-linecap', 'round');
       if (hot) p.classList.add('uf-hot');
       return p;
@@ -1147,6 +1173,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     const repIn = (id: string): string | null => { const r = stageRepOf(id); return r && pos[r] ? r : null; };
     const seenK = new Set<string>();
     for (const e of EDGES) {
+      if (!wireOn(e)) continue;
       const a = repIn(e.from), b = repIn(e.to);
       if (!a || !b || a === b) continue;
       const k = a + ' ' + b;
@@ -1162,15 +1189,16 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       const bx = pr.left - sr.left + pr.width / 2, by = pr.top - sr.top + pr.height / 2;
       const linked = new Set<string>();
       for (const e of EDGES) {
+        if (!wireOn(e)) continue;
         const ra = repIn(e.from), rb = repIn(e.to);
         let s: string | null = null;
         if (ra && !rb && proxyTargetOf(e.to, frame) === og) s = ra;
         else if (rb && !ra && proxyTargetOf(e.from, frame) === og) s = rb;
         if (!s || linked.has(s)) continue;
-        if (SEL && stageRepOf(SEL) && s !== SEL) continue;
         linked.add(s);
         const pa = rel(pos[s]);
         const mx = (pa.x + bx) / 2, my = (pa.y + by) / 2;
+        // U3: non-selected wires stay visible but recede (mkPath dims when SEL) — no more vanish-on-deselect flip
         sWiresEl.appendChild(mkPath(`M ${pa.x} ${pa.y} Q ${mx} ${pa.y} ${mx} ${my} T ${bx} ${by}`, !!SEL && s === SEL));
       }
       // frame-attributed pill with no child anchor: wire from the stage-group frame edge toward the pill
@@ -1256,6 +1284,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     focusDim();
     renderTree();
     renderInspector();
+    refreshStage();   // U4: the stage projection subscribes to the same view state as the canvas
     const shown = [...U.keys()].filter((id) => isRendered(id)).length - ROOTS.filter((r) => isRendered(r)).length;
     const total = U.size - ROOTS.length;
     q('ufCount').textContent = shown + ' shown';
@@ -1284,8 +1313,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     FOCUS_TYPE = null;
     FM_OPEN = false;
     if (STAGE) {
-      // re-aggregate proxies around the new selection; no rebuild
-      stageProxies();
+      // U3: pills are selection-stable — selection only re-lights cards and wires; no rebuild
       focusDim();
       renderTree();
       renderInspector();
