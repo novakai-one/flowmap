@@ -29,6 +29,8 @@ import type { SelectionApi } from '../interaction/selection';
 import type { CameraApi } from '../core/camera/camera';
 import { esc } from '../core/config/config';
 import { portPos, bestSides } from '../core/state/state';
+import { emptyViewSpec, normalizeViewSpec, reduceView } from '../core/viewspec/viewspec';
+import type { ViewSpec, ViewAction, ViewModelIndex } from '../core/viewspec/viewspec';
 import { orthoPath as elbowPath, polyPath } from '../render/wires';
 import { routeGraph } from '../render/avoidRouter';
 import type { AdhocRect, AdhocEdge } from '../render/avoidRouter';
@@ -444,12 +446,9 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     for (const id of U.keys()) { OUT[id] = []; IN[id] = []; }
     for (const e of EDGES) { OUT[e.from].push(e); IN[e.to].push(e); }
     for (const id of U.keys()) (U.get(id) as UNode).fanIn = new Set(IN[id].map((e) => e.from)).size;
-    // drop stale view state that no longer resolves
-    for (const id of [...expanded]) if (!U.has(id)) expanded.delete(id);
-    for (const id of [...hidden]) if (!U.has(id)) hidden.delete(id);
-    if (SEL && !U.has(SEL)) SEL = null;
-    if (SELW && (!U.has(SELW.a) || !U.has(SELW.b))) SELW = null;
-    if (STAGE && !U.has(STAGE)) { STAGE = null; overlay.classList.remove('staged'); }
+    // drop stale view state that no longer resolves — the schema boundary owns this
+    spec = deepFreeze(normalizeViewSpec(spec, [...U.keys()]));
+    overlay.classList.toggle('staged', !!spec.stage);
   }
   const gu = (id: string): UNode => U.get(id) as UNode;
   const isContainer = (u: UNode | undefined): boolean => !!u && u.children.length > 0;
@@ -460,59 +459,137 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     return false;
   };
 
-  /* ================= VIEW STATE ================= */
-  const expanded = new Set<string>();
-  const hidden = new Set<string>();
-  let SEL: string | null = null, QUERY = '';
-  // U2: a wire is a first-class selectable — keyed by its rendered rep pair
-  // (explore: visibleRep pair · stage: stageRepOf pair). Mutually exclusive with SEL.
-  let SELW: { a: string; b: string } | null = null;
-  // wires are the story, never an opt-in (approved design decision #1): calls default ON for a fresh view
-  const layers: Record<string, boolean> = {
-    calls: true, deps: false, desc: false, iface: false, metrics: false, color: false, trust: false, blast: false,
-  };
+  /* ================= VIEW STATE (M3: ONE serializable spec) =================
+     screen = render(spec). The spec is the only view state; it mutates ONLY
+     through the pure reduceView (core/viewspec) via apply/commit below, and
+     each installed spec is frozen so a stray direct write throws in dev.
+     The three assignment sites: apply(), persistView('load'), build(). */
+  let spec: ViewSpec = emptyViewSpec();
 
-  /** selection survives the mode boundary: seed SEL from the editor on open; hand
-      the reading selection back (selectOnly + zoomToNode) on close. No new state —
-      the two surfaces share one selection. */
+  const deepFreeze = (s: ViewSpec): ViewSpec => {
+    Object.freeze(s.expanded); Object.freeze(s.hidden); Object.freeze(s.layers);
+    if (s.selWire) Object.freeze(s.selWire);
+    return Object.freeze(s);
+  };
+  /** plain-data containment slice for the reducer (reads only) */
+  function modelIndex(): ViewModelIndex {
+    const parents: Record<string, string | null> = {}, children: Record<string, string[]> = {};
+    for (const [id, u] of U) { parents[id] = u.parent; children[id] = u.children; }
+    return { parents, children, roots: ROOTS };
+  }
+  /** reduce one or more actions into a new frozen spec WITHOUT painting —
+      for boundary choreography (open-seeding, travel) that repaints itself */
+  function apply(...actions: ViewAction[]): void {
+    let next: ViewSpec = spec;
+    const m = modelIndex();
+    for (const a of actions) next = reduceView(next, a, m);
+    spec = deepFreeze(next);
+  }
+  /** the ONLY view-mutation entry: pure reduction, frozen install, then the
+      per-action repaint. No handler touches view state or the DOM directly. */
+  function commit(a: ViewAction): void {
+    apply(a);
+    paint(a);
+  }
+  /** per-action repaint: today's hand-tuned render subsets (stagger, staged
+      pill stability, focus flow) transcribed BEHIND the commit boundary —
+      an internal optimization; every pixel change is downstream of a spec
+      transition. */
+  function paint(a: ViewAction): void {
+    switch (a.type) {
+      case 'toggleExpand': case 'reveal': case 'hide':
+        render(true);
+        return;
+      case 'foldAll':
+        overlay.classList.remove('staged');
+        renderStageGroup(undefined);
+        render(true);
+        return;
+      case 'select':
+        if (!spec.stage && spec.layers.blast) { render(false); return; }
+        // U3/U6: selection only re-lights cards and wires — no rebuild, pills stay stable
+        focusDim();
+        renderTree();
+        renderInspector();
+        setTimeout(spec.stage ? drawStageWires : drawWires, 0);
+        return;
+      case 'selectWire': case 'focusType':
+        focusDim();
+        renderInspector();
+        setTimeout(spec.stage ? drawStageWires : drawWires, 0);
+        return;
+      case 'setStage':
+        overlay.classList.toggle('staged', !!spec.stage);
+        renderStageGroup(undefined);
+        focusDim();
+        return;
+      case 'toggleLayer':
+        applyLayerClasses();
+        renderLayers();
+        render(false);
+        return;
+      case 'setQuery':
+        renderTree();
+        return;
+      case 'setFmOpen':
+        renderInspector();
+        return;
+    }
+  }
+  /** clear-or-set selection without toggle semantics (boundary sites) */
+  function setSel(id: string | null): void {
+    if (spec.sel !== id) apply({ type: 'select', id });
+  }
+  /** reveal + select + full repaint — the shared "go to" path (tree label,
+      inspector connections) */
+  function goTo(id: string): void {
+    apply({ type: 'reveal', id });
+    setSel(id);
+    render(true);
+  }
+
+  /** selection survives the mode boundary: seed the spec from the editor on
+      open; hand the reading selection back (selectOnly + zoomToNode) on
+      close. No new state — the two surfaces share one selection. */
   function selectSync(dir: 'open' | 'close'): void {
     if (dir === 'open') {
       const first = [...ctx.state.sel].find((id) => U.has(id));
-      if (first) { SEL = first; revealNode(first); }
+      if (first) { apply({ type: 'reveal', id: first }); setSel(first); }
       return;
     }
-    if (SEL && ctx.state.nodes[SEL]) {
-      deps.selection.selectOnly(SEL);
-      deps.camera.zoomToNode(SEL);
+    if (spec.sel && ctx.state.nodes[spec.sel]) {
+      deps.selection.selectOnly(spec.sel);
+      deps.camera.zoomToNode(spec.sel);
     }
   }
 
-  /** reading session per diagram (sorted containment roots as identity):
-      expanded/hidden/layers survive close and reload; a never-read diagram
-      still arrives fully folded, all layers off. */
+  /** reading session per diagram (sorted containment roots as identity),
+      stored as the full v1 ViewSpec; load goes through normalizeViewSpec
+      (the schema boundary — a pre-M3 {expanded,hidden,layers} entry is a
+      valid subset, migration is branch-free) and applies the durable trio.
+      sel/stage/query are carried by the format but selectSync owns
+      selection at the mode boundary. */
   function persistView(dir: 'save' | 'load'): void {
     try {
       const key = 'unfold.view';
-      const all = JSON.parse(localStorage.getItem(key) ?? '{}') as
-        Record<string, { expanded?: string[]; hidden?: string[]; layers?: Record<string, boolean> }>;
+      const all = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
       const fp = [...ROOTS].sort().join('|');
       if (!fp) return;
       if (dir === 'save') {
-        all[fp] = { expanded: [...expanded], hidden: [...hidden], layers: { ...layers } };
+        all[fp] = spec;
         const keys = Object.keys(all);
         while (keys.length > 24) delete all[keys.shift() as string];
         localStorage.setItem(key, JSON.stringify(all));
         return;
       }
-      const v = all[fp];
-      expanded.clear(); hidden.clear();
-      (v?.expanded ?? []).forEach((id) => { if (U.has(id)) expanded.add(id); });
-      (v?.hidden ?? []).forEach((id) => { if (U.has(id)) hidden.add(id); });
-      // stored layer prefs win; a never-read diagram still arrives with the calls story ON
-      const stored = v?.layers;
-      for (const k of Object.keys(layers)) {
-        layers[k] = stored ? !!stored[k] && (k !== 'trust' || TRUST_SRC) : k === 'calls';
-      }
+      const loaded = normalizeViewSpec(all[fp], [...U.keys()]);
+      spec = deepFreeze({
+        ...emptyViewSpec(),
+        expanded: loaded.expanded,
+        hidden: loaded.hidden,
+        // stored layer prefs win; trust is gated on a live advisory source (runtime capability, not schema)
+        layers: { ...loaded.layers, trust: loaded.layers.trust && TRUST_SRC },
+      });
     } catch { /* storage unavailable — the session just doesn't persist */ }
   }
 
@@ -522,9 +599,9 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     while (u) {
       if (seen.has(u.id)) return false;
       seen.add(u.id);
-      if (hidden.has(u.id)) return false;
+      if (spec.hidden.includes(u.id)) return false;
       if (!u.parent) return true;
-      if (!expanded.has(u.parent)) return false;
+      if (!spec.expanded.includes(u.parent)) return false;
       u = U.get(u.parent);
     }
     return true;
@@ -540,27 +617,20 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     }
     return null;
   }
-  function revealNode(id: string): void {
-    let u = U.get(id);
-    const chain: string[] = [], seen = new Set<string>();
-    while (u && !seen.has(u.id)) { seen.add(u.id); chain.push(u.id); u = u.parent ? U.get(u.parent) : undefined; }
-    chain.forEach((c) => hidden.delete(c));
-    chain.slice(1).forEach((c) => expanded.add(c));
-  }
 
   /* ---- blast radius: transitive dependents of the selection ---- */
   let BLAST_N = 0;
   let REP_HOPS = new Map<string, number>();
   function computeBlast(): void {
     REP_HOPS = new Map(); BLAST_N = 0;
-    if (!layers.blast || !SEL) return;
+    if (!spec.layers.blast || !spec.sel) return;
     // U6: a selected container blasts from its whole subtree — hier groups are not
     // edge endpoints, so seeding only the group id would find nothing and dim everything
-    const seeds = new Set<string>([SEL]);
-    if (isContainer(U.get(SEL))) {
+    const seeds = new Set<string>([spec.sel]);
+    if (isContainer(U.get(spec.sel))) {
       (function walk(x: string): void {
         (U.get(x)?.children ?? []).forEach((c) => { if (!seeds.has(c)) { seeds.add(c); walk(c); } });
-      })(SEL);
+      })(spec.sel);
     }
     const hop = new Map<string, number>([...seeds].map((s) => [s, 0] as [string, number]));
     const bq: string[] = [...seeds];
@@ -570,7 +640,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     }
     for (const s of seeds) hop.delete(s);
     BLAST_N = hop.size;
-    const selRep = visibleRep(SEL);
+    const selRep = visibleRep(spec.sel);
     for (const [id, hp] of hop) {
       const rep = visibleRep(id);
       if (!rep || rep === selRep) continue;
@@ -625,11 +695,8 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   });
   stageEl.addEventListener('pointerup', () => {
     // U2: click-without-drag on empty canvas deselects a selected wire (drag threshold 3px)
-    if (panDrag && !panDrag.moved && SELW) {
-      SELW = null;
-      focusDim();
-      renderInspector();
-      setTimeout(STAGE ? drawStageWires : drawWires, 0);
+    if (panDrag && !panDrag.moved && spec.selWire) {
+      commit({ type: 'selectWire', a: spec.selWire.a, b: spec.selWire.b });   // re-select = toggle off
     }
     panDrag = null; stageEl.classList.remove('grab');
   });
@@ -649,11 +716,11 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     contentEl.appendChild(wrap);
   }
   const nodeEl = (id: string): HTMLElement =>
-    expanded.has(id) && isContainer(U.get(id)) ? groupEl(gu(id)) : cardEl(gu(id));
+    spec.expanded.includes(id) && isContainer(U.get(id)) ? groupEl(gu(id)) : cardEl(gu(id));
   function groupEl(u: UNode): HTMLElement {
-    const kids = u.children.filter((c) => !hidden.has(c));
-    const allLeaf = kids.every((c) => !(expanded.has(c) && isContainer(U.get(c))));
-    const g = h('div', 'uf-grp open ' + (SEL === u.id ? 'sel ' : '') + (allLeaf ? 'leaf' : depthOf(u.id) % 2 === 0 ? 'row' : 'col'));
+    const kids = u.children.filter((c) => !spec.hidden.includes(c));
+    const allLeaf = kids.every((c) => !(spec.expanded.includes(c) && isContainer(U.get(c))));
+    const g = h('div', 'uf-grp open ' + (spec.sel === u.id ? 'sel ' : '') + (allLeaf ? 'leaf' : depthOf(u.id) % 2 === 0 ? 'row' : 'col'));
     g.dataset.id = u.id;
     const head = h('div', 'uf-ghead',
       `<span class="uf-tw" title="Fold"><svg viewBox="0 0 10 10"><path d="M3 1l4 4-4 4"/></svg></span>
@@ -678,17 +745,17 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     // U6: a collapsed GROUP card selects like everything else; only generic 'node'
     // containers keep click-to-expand. Groups expand via the corner icon / dblclick.
     const clickOpens = canOpen && u.kind === 'node';
-    const sel = SEL === u.id;
-    const blastOn = layers.blast && !!SEL;
+    const sel = spec.sel === u.id;
+    const blastOn = spec.layers.blast && !!spec.sel;
     const hop = blastOn ? REP_HOPS.get(u.id) : undefined;
-    const nbr = !blastOn && SEL ? !sel && isNeighbour(SEL, u.id) : false;
+    const nbr = !blastOn && spec.sel ? !sel && isNeighbour(spec.sel, u.id) : false;
     // a selected container's members ARE the selection — they never dim under blast
-    const inSel = sel || (!!SEL && hasAncestor(u.id, SEL));
-    const dim = blastOn ? !inSel && hop == null : (SEL ? !sel && !nbr : false);
+    const inSel = sel || (!!spec.sel && hasAncestor(u.id, spec.sel));
+    const dim = blastOn ? !inSel && hop == null : (spec.sel ? !sel && !nbr : false);
     const c = h('div', 'uf-card ' + (SYM_KINDS.has(u.kind) ? 'sym ' : '') + (canOpen && !clickOpens ? 'can-open ' : '')
       + (sel ? 'sel ' : '') + (nbr ? 'nbr ' : '') + (hop != null ? 'bh' + Math.min(3, hop) + ' ' : '') + (dim ? 'dim' : ''));
     c.dataset.id = u.id;
-    if (layers.color) c.style.setProperty('--uf-kc', `var(${KIND_VAR[u.kind] ?? '--uf-k-function'})`);
+    if (spec.layers.color) c.style.setProperty('--uf-kc', `var(${KIND_VAR[u.kind] ?? '--uf-k-function'})`);
     const meta = canOpen ? `${u.children.length} inside · fan-in ${u.fanIn}` : `${u.kind} · fan-in ${u.fanIn}`;
     c.innerHTML = `<div class="uf-crow"><span class="uf-dot"></span><span class="uf-cname">${esc(u.label)}</span></div>
       <div class="uf-cmeta">${esc(meta)}</div>
@@ -708,7 +775,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     c.ondblclick = (ev) => {
       if ((ev.target as HTMLElement).isContentEditable) return;
       if (canOpen) toggleExpand(u.id);
-      else if (SEL === u.id) renameInPlace(u.id);
+      else if (spec.sel === u.id) renameInPlace(u.id);
     };
     return c;
   }
@@ -818,17 +885,11 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
 
   /* ---- U2: wires are selectable, informative objects (legacy-editor parity) ---- */
 
-  /** select an aggregated wire by its rendered rep pair; clears node/type focus.
-      Re-click deselects. Never enters stage mode — a wire is information, not travel. */
+  /** select an aggregated wire by its rendered rep pair; the reducer clears
+      node/type focus (mutual exclusion) and a re-click toggles off. Never
+      enters stage mode — a wire is information, not travel. */
   function selectWire(a: string, b: string): void {
-    const same = !!SELW && SELW.a === a && SELW.b === b;
-    SELW = same ? null : { a, b };
-    SEL = null;
-    FOCUS_TYPE = null;
-    FM_OPEN = false;
-    focusDim();
-    renderInspector();
-    setTimeout(STAGE ? drawStageWires : drawWires, 0);
+    commit({ type: 'selectWire', a, b });
   }
 
   /** append an invisible wide hit path over a drawn wire: click selects, hover pre-lights */
@@ -844,7 +905,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
 
   function drawWires(): void {
     wiresEl.innerHTML = '';
-    if (!layers.calls && !layers.deps) return;
+    if (!spec.layers.calls && !spec.layers.deps) return;
     const { w, h: hh } = contentSize();
     wiresEl.setAttribute('width', String(w));
     wiresEl.setAttribute('height', String(hh));
@@ -873,7 +934,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     interface Agg { a: string; b: string; w: number; adv: boolean }
     const agg = new Map<string, Agg>();
     for (const e of EDGES) {
-      if (!((e.call && layers.calls) || (e.dep && layers.deps))) continue;
+      if (!((e.call && spec.layers.calls) || (e.dep && spec.layers.deps))) continue;
       const a = visibleRep(e.from), b = visibleRep(e.to);
       if (!a || !b || a === b || !pos[a] || !pos[b]) continue;
       const k = a + ' ' + b;
@@ -882,8 +943,8 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       s.w += e.w;
       if (ALLOW.has(e.from + '->' + e.to)) s.adv = true;
     }
-    const selRep = SEL ? visibleRep(SEL) : null;
-    const blastOn = layers.blast && !!selRep;
+    const selRep = spec.sel ? visibleRep(spec.sel) : null;
+    const blastOn = spec.layers.blast && !!selRep;
     const maxw = Math.max(1, ...[...agg.values()].map((x) => x.w));
     const items = [...agg.values()].sort((x, y) => {
       const hx = selRep && (x.a === selRep || x.b === selRep), hy = selRep && (y.a === selRep || y.b === selRep);
@@ -895,9 +956,9 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     const outDeg = new Map<string, number>();
     for (const it of items) outDeg.set(it.a, (outDeg.get(it.a) ?? 0) + 1);
     for (const it of items) {
-      const wsel = !!SELW && it.a === SELW.a && it.b === SELW.b;
+      const wsel = !!spec.selWire && it.a === spec.selWire.a && it.b === spec.selWire.b;
       const hot = wsel || (!!selRep && (it.a === selRep || it.b === selRep));
-      const adv = layers.trust && it.adv;
+      const adv = spec.layers.trust && it.adv;
       const inBlast = blastOn && (REP_HOPS.has(it.a) || it.a === selRep) && (REP_HOPS.has(it.b) || it.b === selRep);
       const hub = !hot && (outDeg.get(it.a) ?? 0) > 8;
       // weight ramp: the heavy flows carry the story, the light ones recede instead of stacking into noise
@@ -909,7 +970,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       p.setAttribute('fill', 'none');
       p.setAttribute('stroke', hot ? selCol : adv ? advCol : edgeCol);
       p.setAttribute('stroke-width', String(hot ? Math.max(1.6, width) : width));
-      const op = selRep || SELW ? (hot ? .95 : inBlast ? .55 : .13) : .18 + .55 * t;
+      const op = selRep || spec.selWire ? (hot ? .95 : inBlast ? .55 : .13) : .18 + .55 * t;
       p.setAttribute('stroke-opacity', String(adv ? Math.max(op, .5) : op));
       p.setAttribute('stroke-linecap', 'round');
       if (adv) p.setAttribute('stroke-dasharray', '4 3');
@@ -933,8 +994,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
      Canvas coordinates stay the single spatial truth; stage mode is a SECOND
      PROJECTION of the same graph. Proxy directions derive from group centroids
      in ctx.state positions — the human's manual layout is the source of angles. */
-  let STAGE: string | null = null;        // staged container id (spec.stage)
-  let FOCUS_TYPE: string | null = null;   // spec.focusType
+  // spec.stage / spec.focusType carry the projection; only animation infra lives here
   let prevShown = new Set<string>();      // entrance-stagger diffing
   let wireEnterAt = 0;                    // wires draw in only after cards land
   let wiresEverDrawn = new Set<string>();
@@ -947,9 +1007,9 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   /** the staged container plus every ancestor above it (the stage's frame set) */
   function stageFrameIds(): Set<string> {
     const s = new Set<string>();
-    if (!STAGE) return s;
-    s.add(STAGE);
-    let u = U.get(STAGE);
+    if (!spec.stage) return s;
+    s.add(spec.stage);
+    let u = U.get(spec.stage);
     const seen = new Set<string>();
     while (u && u.parent && !seen.has(u.id)) { seen.add(u.id); s.add(u.parent); u = U.get(u.parent); }
     return s;
@@ -971,8 +1031,8 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     const seen = new Set<string>();
     while (u && !seen.has(u.id)) {
       seen.add(u.id);
-      if (u.id === STAGE) return null;
-      if (u.parent === STAGE) return u.id;
+      if (u.id === spec.stage) return null;
+      if (u.parent === spec.stage) return u.id;
       u = u.parent ? U.get(u.parent) : undefined;
     }
     return null;
@@ -1013,26 +1073,26 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
 
   /** focus illumination: selection glows, 1-hop neighbours lit, its wires flow, rest dims — no rebuild */
   function focusDim(): void {
-    const blastOn = layers.blast && !!SEL;
+    const blastOn = spec.layers.blast && !!spec.sel;
     overlay.querySelectorAll<HTMLElement>('.uf-card').forEach((el) => {
       const id = el.dataset.id as string;
-      const sel = SEL === id;
-      const lit = !!FOCUS_TYPE && carriesType(id, FOCUS_TYPE);
-      const wep = !!SELW && (SELW.a === id || SELW.b === id);   // U2: a selected wire lights its endpoints
+      const sel = spec.sel === id;
+      const lit = !!spec.focusType && carriesType(id, spec.focusType);
+      const wep = !!spec.selWire && (spec.selWire.a === id || spec.selWire.b === id);   // U2: a selected wire lights its endpoints
       el.classList.toggle('sel', sel);
       el.classList.toggle('lit', lit || wep);
       if (!blastOn) {
-        const nbr = !FOCUS_TYPE && !!SEL && !sel && isNeighbour(SEL, id);
-        const dim = FOCUS_TYPE ? !lit : SELW ? !wep : (SEL ? !sel && !nbr : false);
+        const nbr = !spec.focusType && !!spec.sel && !sel && isNeighbour(spec.sel, id);
+        const dim = spec.focusType ? !lit : spec.selWire ? !wep : (spec.sel ? !sel && !nbr : false);
         el.classList.toggle('nbr', nbr);
         el.classList.toggle('dim', dim);
       }
     });
     // U6: a selected group frame carries the ring too (member cards handle their own dim)
     overlay.querySelectorAll<HTMLElement>('.uf-grp').forEach((el) =>
-      el.classList.toggle('sel', SEL === el.dataset.id));
+      el.classList.toggle('sel', spec.sel === el.dataset.id));
     overlay.querySelectorAll<HTMLElement>('.uf-t').forEach((s) =>
-      s.classList.toggle('hit', s.dataset.t === FOCUS_TYPE));
+      s.classList.toggle('hit', s.dataset.t === spec.focusType));
   }
 
   /** animated reframe: the world transform-scales so all visible content fits (~.9s expo) */
@@ -1049,32 +1109,25 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
 
   /** type focus: every carrier module lights across the surface; inspector lists carriers */
   function typeFocus(t: string | null): void {
-    FOCUS_TYPE = t;
-    if (t) { SEL = null; SELW = null; }
-    focusDim();
-    renderInspector();
-    setTimeout(STAGE ? drawStageWires : drawWires, 0);
+    commit({ type: 'focusType', t });
   }
   overlay.addEventListener('click', (e) => {
     const tk = (e.target as HTMLElement).closest('.uf-t') as HTMLElement | null;
     if (!tk) return;
     e.stopPropagation();
-    typeFocus(FOCUS_TYPE === tk.dataset.t ? null : (tk.dataset.t as string));
+    typeFocus(spec.focusType === tk.dataset.t ? null : (tk.dataset.t as string));
   }, true);
 
-  /** stage projection: focused group center-stage; explore world blurred behind. Exit restores explore exactly. */
+  /** stage projection: focused group center-stage; explore world blurred behind. Exit restores explore exactly.
+      (a projection change invalidates a wire selection — the reducer owns that rule) */
   function stageMode(gid: string | null): void {
-    STAGE = gid && U.has(gid) ? gid : null;
-    SELW = null;   // a wire selection is keyed to one projection's reps — a projection change invalidates it
-    overlay.classList.toggle('staged', !!STAGE);
-    renderStageGroup(undefined);
-    focusDim();
+    commit({ type: 'setStage', id: gid });
   }
   function renderStageGroup(dirFrom?: number): void {
     stageLayer.querySelectorAll('.uf-sgroup,.uf-proxy').forEach((x) => x.remove());
     sWiresEl.innerHTML = '';
-    if (!STAGE) return;
-    const u = gu(STAGE);
+    if (!spec.stage) return;
+    const u = gu(spec.stage);
     const crumbs: string[] = [];
     let x: UNode | undefined = u;
     const seen = new Set<string>();
@@ -1084,10 +1137,10 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
         <span class="uf-strail">${esc(crumbs.join(' / '))}</span>
         <button class="uf-sleave">← explore</button></div>`);
     const wrap = h('div', 'uf-sbody');
-    for (const c of u.children) if (!hidden.has(c)) wrap.appendChild(cardEl(gu(c)));
+    for (const c of u.children) if (!spec.hidden.includes(c)) wrap.appendChild(cardEl(gu(c)));
     g.appendChild(wrap);
     (g.querySelector('.uf-sleave') as HTMLElement).onclick = () => {
-      SEL = null; FOCUS_TYPE = null; stageMode(null); renderInspector(); setTimeout(drawWires, 0);
+      setSel(null); stageMode(null); renderInspector(); setTimeout(drawWires, 0);
     };
     if (dirFrom !== undefined) {
       g.style.transition = 'none';
@@ -1104,9 +1157,9 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       (layers, hidden, blast, selection) without replaying entrance transitions.
       Called by render() so both projections subscribe to the same state. */
   function refreshStage(): void {
-    if (!STAGE) return;
-    const u = U.get(STAGE);
-    if (!u || !u.children.some((c) => !hidden.has(c))) {
+    if (!spec.stage) return;
+    const u = U.get(spec.stage);
+    if (!u || !u.children.some((c) => !spec.hidden.includes(c))) {
       // staged container gone or emptied by reveal toggles — exit to explore
       stageMode(null);
       return;
@@ -1129,7 +1182,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       sub-group shows no connections at all. Child-attributed links obey the selection filter; frame links persist. */
   function stageProxies(): void {
     stageLayer.querySelectorAll('.uf-proxy').forEach((p) => p.remove());
-    if (!STAGE) return;
+    if (!spec.stage) return;
     const frameIds = stageFrameIds();
     interface PLink { inside: string | null; outside: string }
     const byRoot = new Map<string, PLink[]>();
@@ -1147,7 +1200,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     }
     const cx = stageEl.clientWidth / 2, cy = stageEl.clientHeight / 2;
     const R = Math.min(stageEl.clientWidth, stageEl.clientHeight) * .40;
-    const a = centroidOf(STAGE);
+    const a = centroidOf(spec.stage);
     const entries = [...byRoot.entries()].map(([og, links]) => {
       const b = centroidOf(og);
       return { og, links, ang: Math.atan2(b.y - a.y, b.x - a.x) };
@@ -1202,7 +1255,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     p.innerHTML = `<span class="uf-ptitle">${esc(ogu.label)}</span>${body}<button class="uf-ptravel">travel →</button>`;
     (p.querySelector('.uf-ptravel') as HTMLElement).onclick = (e) => {
       e.stopPropagation();
-      SEL = uniq[0] && gu(og).children.includes(uniq[0]) ? uniq[0] : null;
+      setSel(uniq[0] && gu(og).children.includes(uniq[0]) ? uniq[0] : null);
       stageTravel(og, ang);
     };
     p.onclick = (e) => { e.stopPropagation(); p.remove(); stageProxies(); setTimeout(drawStageWires, 0); };
@@ -1211,10 +1264,13 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     if (!U.has(target)) return;
     if (!gu(target).children.length) {
       // a childless module has nothing to project — land in explore with it selected
-      SEL = target; FOCUS_TYPE = null; stageMode(null); revealNode(target); render(true);
+      apply({ type: 'setStage', id: null }, { type: 'reveal', id: target });
+      setSel(target);
+      overlay.classList.remove('staged');
+      render(true);
       return;
     }
-    STAGE = target;
+    apply({ type: 'setStage', id: target });
     overlay.classList.add('staged');
     renderStageGroup(fromAngle + Math.PI);
     focusDim();
@@ -1225,9 +1281,9 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   /** stage wires: intra-stage curves between staged cards + curved wires to proxy pills; selection carries the flow */
   function drawStageWires(): void {
     sWiresEl.innerHTML = '';
-    if (!STAGE) return;
-    if (!layers.calls && !layers.deps) return;  // U3/U4: stage wires obey the same wire layers as the canvas
-    const wireOn = (e: UEdge): boolean => (e.call && layers.calls) || (e.dep && layers.deps);
+    if (!spec.stage) return;
+    if (!spec.layers.calls && !spec.layers.deps) return;  // U3/U4: stage wires obey the same wire layers as the canvas
+    const wireOn = (e: UEdge): boolean => (e.call && spec.layers.calls) || (e.dep && spec.layers.deps);
     const sw = stageEl.clientWidth, sh = stageEl.clientHeight;
     sWiresEl.setAttribute('viewBox', `0 0 ${sw} ${sh}`);
     const sr = stageEl.getBoundingClientRect();
@@ -1243,7 +1299,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       p.setAttribute('fill', 'none');
       p.setAttribute('stroke', hot ? selCol : edgeCol);
       p.setAttribute('stroke-width', hot ? '1.8' : '1.2');
-      p.setAttribute('stroke-opacity', hot ? '.95' : SEL || SELW ? '.16' : '.5');
+      p.setAttribute('stroke-opacity', hot ? '.95' : spec.sel || spec.selWire ? '.16' : '.5');
       p.setAttribute('stroke-linecap', 'round');
       if (hot) p.classList.add('uf-hot');
       return p;
@@ -1259,8 +1315,8 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       if (seenK.has(k)) continue;
       seenK.add(k);
       const pa = rel(pos[a]), pb = rel(pos[b]);
-      const wsel = !!SELW && a === SELW.a && b === SELW.b;
-      const hot = wsel || (!!SEL && (a === SEL || b === SEL));
+      const wsel = !!spec.selWire && a === spec.selWire.a && b === spec.selWire.b;
+      const hot = wsel || (!!spec.sel && (a === spec.sel || b === spec.sel));
       const d = `M ${pa.x} ${pa.y} C ${(pa.x + pb.x) / 2} ${pa.y} ${(pa.x + pb.x) / 2} ${pb.y} ${pb.x} ${pb.y}`;
       const vp = mkPath(d, hot);
       sWiresEl.appendChild(vp);
@@ -1281,8 +1337,8 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
         linked.add(s);
         const pa = rel(pos[s]);
         const mx = (pa.x + bx) / 2, my = (pa.y + by) / 2;
-        // U3: non-selected wires stay visible but recede (mkPath dims when SEL) — no more vanish-on-deselect flip
-        sWiresEl.appendChild(mkPath(`M ${pa.x} ${pa.y} Q ${mx} ${pa.y} ${mx} ${my} T ${bx} ${by}`, !!SEL && s === SEL));
+        // U3: non-selected wires stay visible but recede (mkPath dims when selected) — no more vanish-on-deselect flip
+        sWiresEl.appendChild(mkPath(`M ${pa.x} ${pa.y} Q ${mx} ${pa.y} ${mx} ${my} T ${bx} ${by}`, !!spec.sel && s === spec.sel));
       }
       // frame-attributed pill with no child anchor: wire from the stage-group frame edge toward the pill
       if (!linked.size && px.dataset.frame) {
@@ -1301,14 +1357,13 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
 
   /* ================= WRITE-THROUGH (never a private write path) ================= */
   const fmEditor = initInspectorFrontmatter(ctx);
-  let FM_OPEN = false;
 
   /** inline rename on the selected card (Enter / double-click on selected), writing
       through the existing model path — mutate ctx.state, then hooks render + sync +
       pushHistory + persist. Never a private write path. */
   function renameInPlace(id: string): void {
     const n = ctx.state.nodes[id];
-    const scope: HTMLElement = STAGE ? stageLayer : contentEl;
+    const scope: HTMLElement = spec.stage ? stageLayer : contentEl;
     const name = scope.querySelector<HTMLElement>(`.uf-card[data-id="${window.CSS.escape(id)}"] .uf-cname`);
     if (!n || !name || name.isContentEditable) return;
     const u = gu(id);
@@ -1330,7 +1385,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       if (n.fm?.name) n.fm.name = v; else n.label = v;
       u.label = v;
       ctx.hooks.render(); ctx.hooks.sync(); ctx.hooks.pushHistory(); ctx.hooks.persist();
-      if (STAGE) { renderStageGroup(undefined); focusDim(); renderTree(); renderInspector(); }
+      if (spec.stage) { renderStageGroup(undefined); focusDim(); renderTree(); renderInspector(); }
       else render(false);
     };
     name.onkeydown = (e) => {
@@ -1354,15 +1409,15 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       renderCanvas();
       focusDim();
       renderTree();
-      setTimeout(STAGE ? drawStageWires : drawWires, 0);
+      setTimeout(spec.stage ? drawStageWires : drawWires, 0);
     });
   }
 
   /* ================= ORCHESTRATION ================= */
   let firstFit = true;
   function render(refit: boolean): void {
-    // U2: a wire selection dies with its reps — if either endpoint is no longer the rendered rep, drop it
-    if (SELW && !STAGE && (visibleRep(SELW.a) !== SELW.a || visibleRep(SELW.b) !== SELW.b)) SELW = null;
+    // (the U2 wire-dies-with-its-reps rule moved into reduceView — render is a
+    // pure CONSUMER of the spec; its only other inputs are animation/camera infra)
     computeBlast();
     renderCanvas();
     enterStagger();
@@ -1387,47 +1442,27 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   }
   function toggleExpand(id: string): void {
     if (!isContainer(U.get(id))) return;
-    if (expanded.has(id)) {
-      expanded.delete(id);
-      (function fold(x: string): void { gu(x).children.forEach((c) => { expanded.delete(c); fold(c); }); })(id);
-    } else expanded.add(id);
-    render(true);
+    commit({ type: 'toggleExpand', id });
   }
-  /** U6: a group is a first-class selectable — select + inspect, never stage (U8 deferred to stage 5) */
+  /** U6: a group is a first-class selectable — select + inspect, never stage (U8 deferred to stage 5).
+      The sel/selWire/focusType/fmOpen exclusions live in the reducer; the staged /
+      blast / plain repaints live in paint('select'). */
   function selectGroup(id: string): void {
-    SEL = SEL === id ? null : id;
-    SELW = null;
-    FOCUS_TYPE = null;
-    FM_OPEN = false;
-    if (STAGE) {
-      // U3: pills are selection-stable — selection only re-lights cards and wires; no rebuild
-      focusDim();
-      renderTree();
-      renderInspector();
-      setTimeout(drawStageWires, 0);
-      return;
-    }
-    if (layers.blast) { render(false); return; }
-    focusDim();
-    renderTree();
-    renderInspector();
-    setTimeout(drawWires, 0);
+    commit({ type: 'select', id });
   }
   function select(id: string): void {
-    const wasStaged = !!STAGE;
+    const wasStaged = !!spec.stage;
     selectGroup(id);
-    if (wasStaged || layers.blast) return;
+    if (wasStaged || spec.layers.blast) return;
     // approved stage entry: selecting a card projects its GROUP center-stage;
     // a top-level container card (a module) IS the group — project it directly
-    const u = SEL ? U.get(SEL) : undefined;
+    const u = spec.sel ? U.get(spec.sel) : undefined;
     if (u && u.parent && isContainer(U.get(u.parent))) stageMode(u.parent);
     else if (u && !u.parent && isContainer(u)) stageMode(u.id);
   }
   function foldAll(): void {
-    expanded.clear(); hidden.clear(); SEL = null; SELW = null; QUERY = ''; FOCUS_TYPE = null;
-    if (STAGE) stageMode(null);
     (q('ufSearch') as HTMLInputElement).value = '';
-    render(true);
+    commit({ type: 'foldAll' });
   }
 
   /* ================= TREE ================= */
@@ -1435,12 +1470,12 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     const t = q('ufTree');
     t.innerHTML = '';
     for (const rid of ROOTS) t.appendChild(treeRow(rid));
-    if (QUERY) filterTree();
+    if (spec.query) filterTree();
   }
   function treeRow(id: string): HTMLElement {
     const u = gu(id), wrap = h('div');
-    const canOpen = isContainer(u), on = isRendered(id) && !hidden.has(id), open = expanded.has(id);
-    const row = h('div', 'uf-trow ' + (canOpen ? '' : 'leaf ') + (on ? 'on ' : '') + (open ? 'open ' : '') + (SEL === id ? 'sel' : ''));
+    const canOpen = isContainer(u), on = isRendered(id) && !spec.hidden.includes(id), open = spec.expanded.includes(id);
+    const row = h('div', 'uf-trow ' + (canOpen ? '' : 'leaf ') + (on ? 'on ' : '') + (open ? 'open ' : '') + (spec.sel === id ? 'sel' : ''));
     row.dataset.id = id;
     row.innerHTML = `<span class="uf-ttw">${canOpen ? '<svg viewBox="0 0 10 10"><path d="M3 1l4 4-4 4"/></svg>' : ''}</span>
       <span class="uf-tlabel">${esc(u.label)}</span>
@@ -1448,21 +1483,15 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     (row.querySelector('.uf-ttw') as HTMLElement).onclick = (e) => {
       e.stopPropagation();
       if (!canOpen) return;
-      revealNode(id);
-      if (expanded.has(id)) expanded.delete(id); else expanded.add(id);
-      render(true);
+      apply({ type: 'reveal', id });
+      commit({ type: 'toggleExpand', id });
     };
     (row.querySelector('.uf-tchk') as HTMLElement).onclick = (e) => {
       e.stopPropagation();
-      if (isRendered(id) && !hidden.has(id)) {
-        if (ROOTS.includes(id) && ROOTS.filter((r) => !hidden.has(r)).length <= 1) return;
-        hidden.add(id);
-        if (SEL === id) SEL = null;
-      } else revealNode(id);
-      render(true);
+      commit({ type: isRendered(id) && !spec.hidden.includes(id) ? 'hide' : 'reveal', id });
     };
     (row.querySelector('.uf-tlabel') as HTMLElement).onclick = (e) => {
-      e.stopPropagation(); revealNode(id); SEL = id; render(true);
+      e.stopPropagation(); goTo(id);
     };
     wrap.appendChild(row);
     if (canOpen) {
@@ -1475,7 +1504,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   function filterTree(): void {
     const hits = new Set<string>();
     for (const u of U.values()) {
-      if (u.label.toLowerCase().includes(QUERY) || u.desc.toLowerCase().includes(QUERY)) {
+      if (u.label.toLowerCase().includes(spec.query) || u.desc.toLowerCase().includes(spec.query)) {
         let x: UNode | undefined = u;
         const seen = new Set<string>();
         while (x && !seen.has(x.id)) { seen.add(x.id); hits.add(x.id); x = x.parent ? U.get(x.parent) : undefined; }
@@ -1520,8 +1549,8 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
 
   function renderInspector(): void {
     const el = q('ufInsp');
-    if (FOCUS_TYPE) {
-      const t = FOCUS_TYPE;
+    if (spec.focusType) {
+      const t = spec.focusType;
       const carriers = [...U.keys()].filter((id) => carriesType(id, t));
       el.innerHTML = `<div class="uf-ihead">
         <span class="uf-ikind">type</span>
@@ -1532,25 +1561,24 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
         `<div class="uf-conn" data-goto="${esc(id)}"><span class="uf-arw">·</span><span class="uf-cn">${esc(U.get(id)?.label ?? id)}</span></div>`).join('')}
       </div>`;
       el.querySelectorAll<HTMLElement>('[data-goto]').forEach((r) => {
-        r.onclick = () => {
-          const id = r.dataset.goto as string;
-          FOCUS_TYPE = null;
-          revealNode(id);
-          SEL = id;
-          render(true);
-        };
+        r.onclick = () => goTo(r.dataset.goto as string);
       });
       return;
     }
     // U2: the selected wire is an information object — endpoints, kind, direction,
     // weight, and every underlying model relation it aggregates (legacy-editor parity)
-    if (SELW && U.has(SELW.a) && U.has(SELW.b)) {
-      const a = SELW.a, b = SELW.b;
+    if (spec.selWire && U.has(spec.selWire.a) && U.has(spec.selWire.b)) {
+      const a = spec.selWire.a, b = spec.selWire.b;
       const ua = gu(a), ub = gu(b);
-      const repOf = (id: string): string | null => (STAGE ? stageRepOf(id) : visibleRep(id));
+      const repOf = (id: string): string | null => (spec.stage ? stageRepOf(id) : visibleRep(id));
       const unders = EDGES.filter((e) =>
-        ((e.call && layers.calls) || (e.dep && layers.deps)) && repOf(e.from) === a && repOf(e.to) === b);
-      if (!unders.length) { SELW = null; el.innerHTML = ''; return; }   // the aggregate no longer exists in this projection
+        ((e.call && spec.layers.calls) || (e.dep && spec.layers.deps)) && repOf(e.from) === a && repOf(e.to) === b);
+      if (!unders.length) {
+        // the aggregate no longer exists in this projection — drop the selection through the reducer
+        apply({ type: 'selectWire', a, b });
+        el.innerHTML = '';
+        return;
+      }
       const weight = unders.reduce((s, e) => s + e.w, 0);
       const kinds = [unders.some((e) => e.call) ? 'call' : '', unders.some((e) => e.dep) ? 'dependency' : '']
         .filter(Boolean).join(' + ') || 'wire';
@@ -1563,19 +1591,19 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       </div>
       <div class="uf-blk"><div class="uf-ilab2">endpoints</div>${ep(a, '→', 'from')}${ep(b, '←', 'to')}</div>
       ${unders.length ? `<div class="uf-blk"><div class="uf-ilab2">carries (${unders.length})</div>` + unders.map((e) => {
-        const adv = layers.trust && ALLOW.has(e.from + '->' + e.to);
+        const adv = spec.layers.trust && ALLOW.has(e.from + '->' + e.to);
         const chips = (e.label ? `<span class="uf-cl">${esc(e.label.split(',')[0])}</span>` : '')
           + (adv ? '<span class="uf-cl adv">advisory</span>' : '')
           + `<span class="uf-cl">${e.call && e.dep ? 'call · dep' : e.call ? 'call' : 'dep'}</span>`;
         return `<div class="uf-conn" data-goto="${esc(e.to)}"><span class="uf-arw">${e.dep && !e.call ? '⇢' : '→'}</span><span class="uf-cn">${esc(U.get(e.from)?.label ?? e.from)} → ${esc(U.get(e.to)?.label ?? e.to)}</span>${chips}</div>`;
       }).join('') + '</div>' : ''}`;
       el.querySelectorAll<HTMLElement>('[data-goto]').forEach((r) => {
-        r.onclick = () => { const id = r.dataset.goto as string; SELW = null; revealNode(id); SEL = id; render(true); };
+        r.onclick = () => goTo(r.dataset.goto as string);
       });
       return;
     }
-    if (!SEL || !U.has(SEL)) { el.innerHTML = ''; return; }
-    const u = gu(SEL);
+    if (!spec.sel || !U.has(spec.sel)) { el.innerHTML = ''; return; }
+    const u = gu(spec.sel);
     const isSym = SYM_KINDS.has(u.kind);
     const canOpen = isContainer(u);
     const crumbs: string[] = [];
@@ -1603,18 +1631,18 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       ${crumbs.length ? `<div class="uf-ipath">${esc(crumbs.join('  ›  '))}</div>` : ''}
       ${u.desc ? `<div class="uf-idesc">${esc(u.desc)}</div>` : ''}${role}
       <div class="uf-iact">
-        ${canOpen ? `<button class="uf-ibtn pri" id="ufIOpen">${expanded.has(u.id) ? 'fold' : 'unfold'}</button>` : ''}
+        ${canOpen ? `<button class="uf-ibtn pri" id="ufIOpen">${spec.expanded.includes(u.id) ? 'fold' : 'unfold'}</button>` : ''}
         ${isRendered(u.id)
           ? `<button class="uf-ibtn" id="ufIHide">remove from view</button>`
           : `<button class="uf-ibtn" id="ufIShow">add to view</button>`}
-        ${ctx.state.nodes[u.id] ? `<button class="uf-ibtn${FM_OPEN ? ' pri' : ''}" id="ufIEdit">${FM_OPEN ? 'done' : 'edit'}</button>` : ''}
+        ${ctx.state.nodes[u.id] ? `<button class="uf-ibtn${spec.fmOpen ? ' pri' : ''}" id="ufIEdit">${spec.fmOpen ? 'done' : 'edit'}</button>` : ''}
       </div>
     </div>
-    ${FM_OPEN && ctx.state.nodes[u.id] ? '<div class="uf-blk" id="ufFmHost"></div>' : ''}`;
+    ${spec.fmOpen && ctx.state.nodes[u.id] ? '<div class="uf-blk" id="ufFmHost"></div>' : ''}`;
     const blk = (l: string, a: string[]): string =>
       a.length ? `<div class="uf-blk"><div class="uf-ilab2">${l}</div>${a.map((v) => `<div class="uf-iline">${ifaceLine(v)}</div>`).join('')}</div>` : '';
     html += blk('accepts', u.accepts) + blk('returns', u.returns) + blk('state', u.state);
-    if (layers.blast) {
+    if (spec.layers.blast) {
       html += `<div class="uf-blk"><div class="uf-ilab2">blast radius</div><div class="uf-iline">${BLAST_N} transitive dependent${BLAST_N === 1 ? '' : 's'}</div></div>`;
     }
     const conns = (arr: UEdge[], key: 'from' | 'to', title: string, arrow: string): string => {
@@ -1623,7 +1651,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
       if (!m.size) return '';
       return `<div class="uf-blk"><div class="uf-ilab2">${title} (${m.size})</div>`
         + [...m.entries()].map(([id, lbl]) => {
-          const adv = layers.trust && ALLOW.has(key === 'to' ? u.id + '->' + id : id + '->' + u.id);
+          const adv = spec.layers.trust && ALLOW.has(key === 'to' ? u.id + '->' + id : id + '->' + u.id);
           const chip = adv ? '<span class="uf-cl adv">advisory</span>'
             : lbl ? `<span class="uf-cl">${esc(lbl.split(',')[0])}</span>` : '';
           return `<div class="uf-conn" data-goto="${esc(id)}"><span class="uf-arw">${arrow}</span><span class="uf-cn">${esc(U.get(id)?.label ?? id)}</span>${chip}</div>`;
@@ -1654,15 +1682,15 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     const io = el.querySelector('#ufIOpen') as HTMLElement | null;
     if (io) io.onclick = () => toggleExpand(u.id);
     const ie = el.querySelector('#ufIEdit') as HTMLElement | null;
-    if (ie) ie.onclick = () => { FM_OPEN = !FM_OPEN; renderInspector(); };
+    if (ie) ie.onclick = () => commit({ type: 'setFmOpen', open: !spec.fmOpen });
     const fmHost = el.querySelector('#ufFmHost') as HTMLElement | null;
     if (fmHost) mountFrontmatter(fmHost, u.id);
     const ih = el.querySelector('#ufIHide') as HTMLElement | null;
-    if (ih) ih.onclick = () => { hidden.add(u.id); SEL = null; render(true); };
+    if (ih) ih.onclick = () => commit({ type: 'hide', id: u.id });
     const is2 = el.querySelector('#ufIShow') as HTMLElement | null;
-    if (is2) is2.onclick = () => { revealNode(u.id); render(true); };
+    if (is2) is2.onclick = () => commit({ type: 'reveal', id: u.id });
     el.querySelectorAll<HTMLElement>('[data-goto]').forEach((r) => {
-      r.onclick = () => { const id = r.dataset.goto as string; revealNode(id); SEL = id; render(true); };
+      r.onclick = () => goTo(r.dataset.goto as string);
     });
   }
 
@@ -1672,7 +1700,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     bx.innerHTML = '';
     for (const L of LAYER_DEFS) {
       const noSrc = L.k === 'trust' && !TRUST_SRC;
-      const row = h('div', 'uf-layer' + (layers[L.k] ? ' on' : '') + (noSrc ? ' off' : ''),
+      const row = h('div', 'uf-layer' + (spec.layers[L.k] ? ' on' : '') + (noSrc ? ' off' : ''),
         `<span class="uf-sw"></span><span style="flex:1;min-width:0"><div class="uf-lt">${L.t}</div><div class="uf-ld">${L.d}</div></span>`
         + (noSrc ? '<button class="uf-load" title="Load an edge-advisory-allowlist.txt">load…</button>' : ''));
       if (noSrc) {
@@ -1681,17 +1709,17 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
           if ((e.target as HTMLElement).closest('.uf-load')) { e.stopPropagation(); trustFileEl.click(); }
         };
       } else {
-        row.onclick = () => { layers[L.k] = !layers[L.k]; applyLayerClasses(); renderLayers(); render(false); };
+        row.onclick = () => commit({ type: 'toggleLayer', key: L.k });
       }
       bx.appendChild(row);
     }
   }
   function applyLayerClasses(): void {
-    overlay.classList.toggle('desc', layers.desc);
-    overlay.classList.toggle('iface', layers.iface);
-    overlay.classList.toggle('metrics', layers.metrics);
-    overlay.classList.toggle('color', layers.color);
-    overlay.classList.toggle('trust', layers.trust);
+    overlay.classList.toggle('desc', spec.layers.desc);
+    overlay.classList.toggle('iface', spec.layers.iface);
+    overlay.classList.toggle('metrics', spec.layers.metrics);
+    overlay.classList.toggle('color', spec.layers.color);
+    overlay.classList.toggle('trust', spec.layers.trust);
   }
 
   /* ================= CHROME-LESS CONTROLS ================= */
@@ -1709,8 +1737,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   }
   q('ufTheme').onclick = () => applyDark(!overlay.classList.contains('dark'));
   (q('ufSearch') as HTMLInputElement).oninput = (e) => {
-    QUERY = (e.target as HTMLInputElement).value.trim().toLowerCase();
-    renderTree();
+    commit({ type: 'setQuery', q: (e.target as HTMLInputElement).value.trim().toLowerCase() });
   };
   document.addEventListener('keydown', (e) => {
     if (!overlay.classList.contains('show')) return;
@@ -1718,18 +1745,18 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
     const inAnyField = t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
     if (e.key === 'Enter') {
       // rename the selected card in place — but never while typing in a field
-      if (!inAnyField && SEL && !FOCUS_TYPE) { e.stopPropagation(); renameInPlace(SEL); }
+      if (!inAnyField && spec.sel && !spec.focusType) { e.stopPropagation(); renameInPlace(spec.sel); }
       return;
     }
     if (e.key !== 'Escape') return;
     // a rename in flight or a frontmatter field owns its own Escape; the search box keeps the old chain
     if (t.isContentEditable || (inAnyField && t.id !== 'ufSearch')) return;
     e.stopPropagation();
-    if (FOCUS_TYPE) { typeFocus(null); }
-    else if (SELW) { SELW = null; focusDim(); renderInspector(); setTimeout(STAGE ? drawStageWires : drawWires, 0); }
-    else if (STAGE) { SEL = null; stageMode(null); renderInspector(); setTimeout(drawWires, 0); }
-    else if (SEL) { SEL = null; render(false); }
-    else if (QUERY) { QUERY = ''; (q('ufSearch') as HTMLInputElement).value = ''; renderTree(); }
+    if (spec.focusType) { typeFocus(null); }
+    else if (spec.selWire) { commit({ type: 'selectWire', a: spec.selWire.a, b: spec.selWire.b }); }
+    else if (spec.stage) { setSel(null); stageMode(null); renderInspector(); setTimeout(drawWires, 0); }
+    else if (spec.sel) { selectGroup(spec.sel); }
+    else if (spec.query) { (q('ufSearch') as HTMLInputElement).value = ''; commit({ type: 'setQuery', q: '' }); }
     else close();
   }, true);
 
@@ -1738,14 +1765,13 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   function open(): void {
     applyDark(localStorage.getItem('unfold.theme') === 'dark');
     build();
-    persistView('load');
+    persistView('load');   // resets sel/stage/focusType/fmOpen; restores the durable trio
     selectSync('open');
     prevShown = new Set();
     wiresEverDrawn = new Set();
     wireEnterAt = 0;
-    FOCUS_TYPE = null;
-    FM_OPEN = false;
-    if (STAGE) stageMode(null);
+    overlay.classList.remove('staged');
+    renderStageGroup(undefined);   // clears any stage-layer remnants from the last session
     applyLayerClasses();
     renderLayers();
     overlay.classList.add('show');
@@ -1761,7 +1787,7 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   const closeFn = close;
   // ✕ closes the topmost surface: a staged window exits to explore; explore exits to the editor
   q('ufClose').onclick = () => {
-    if (STAGE) { SEL = null; FOCUS_TYPE = null; stageMode(null); renderInspector(); setTimeout(drawWires, 0); return; }
+    if (spec.stage) { setSel(null); stageMode(null); renderInspector(); setTimeout(drawWires, 0); return; }
     closeFn();
   };
   return {
