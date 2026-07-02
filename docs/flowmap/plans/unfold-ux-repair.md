@@ -100,3 +100,5 @@ frontmatter change). `render()` has no stage branch.
 
 ## Stage results log
 (append one line per completed stage: date · stage · commit · verify command)
+
+- 2026-07-02 · stage 0 · 224d466 · read findings above; verify: `grep -n "setPointerCapture" src/panel/unfold.ts` (no stagelayer exclusion), `grep -n "layers.calls" src/panel/unfold.ts` (absent in drawStageWires)

@@ -85,10 +85,11 @@ const CSS = `
 .uf-overlay button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;padding:0}
 .uf-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 
-.uf-stage{position:relative;flex:1;overflow:hidden;cursor:grab;background:var(--uf-stage)}
+.uf-stage{position:relative;flex:1;overflow:hidden;cursor:grab;background:var(--uf-stage);
+  user-select:none;-webkit-user-select:none}
 .uf-stage.grab{cursor:grabbing}
 .uf-world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
-.uf-world.anim{transition:transform .42s var(--uf-ease)}
+.uf-world.anim{transition:transform .7s cubic-bezier(.16,1,.3,1)}
 /* wires paint ABOVE the containers: an edge between cards inside unfolded groups must stay
    visible crossing the group surfaces, or the wires layer lies by omission */
 .uf-wires{position:absolute;top:0;left:0;overflow:visible;pointer-events:none;z-index:2}
@@ -224,14 +225,14 @@ const CSS = `
 
 /* ---- v3 "stage": stage projection (world blurs behind; group center-stage) ---- */
 .uf-world{transition:opacity .7s,filter .7s}
-.uf-world.anim{transition:transform .42s var(--uf-ease),opacity .7s,filter .7s}
+.uf-world.anim{transition:transform .7s cubic-bezier(.16,1,.3,1),opacity .7s,filter .7s}
 .uf-world.anim2{transition:transform .9s cubic-bezier(.16,1,.3,1),opacity .7s,filter .7s}
 .uf-overlay.staged .uf-world{opacity:.16;filter:blur(5px) saturate(.6);pointer-events:none}
 .uf-stagelayer{position:absolute;inset:0;z-index:10;pointer-events:none}
 .uf-overlay.staged .uf-stagelayer{pointer-events:auto}
 .uf-swires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .uf-sgroup{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.92);opacity:0;
-  transition:opacity .6s cubic-bezier(.16,1,.3,1),transform .6s cubic-bezier(.16,1,.3,1);
+  transition:opacity .75s cubic-bezier(.16,1,.3,1),transform .75s cubic-bezier(.16,1,.3,1);
   background:var(--uf-surface);border:1px solid var(--uf-line);border-radius:18px;
   padding:26px 30px 30px;max-width:720px;box-shadow:var(--uf-shadow-lift)}
 .uf-overlay.staged .uf-sgroup{opacity:1;transform:translate(-50%,-50%)}
@@ -245,7 +246,7 @@ const CSS = `
   background:var(--uf-surface);border:1px solid var(--uf-line);border-radius:99px;
   padding:8px 16px;display:flex;align-items:center;gap:9px;white-space:nowrap;
   box-shadow:var(--uf-shadow);font-family:ui-monospace,Menlo,monospace;font-size:12px;
-  opacity:0;transition:opacity .5s cubic-bezier(.16,1,.3,1),transform .45s cubic-bezier(.16,1,.3,1),border-color .3s,border-radius .35s}
+  opacity:0;transition:opacity .65s cubic-bezier(.16,1,.3,1),transform .6s cubic-bezier(.16,1,.3,1),border-color .3s,border-radius .35s}
 .uf-overlay.staged .uf-proxy{opacity:1}
 .uf-proxy:hover{border-color:var(--uf-accent)}
 .uf-pdot{width:7px;height:7px;border-radius:99px;background:var(--uf-accent);flex:none}
@@ -269,7 +270,8 @@ const CSS = `
 
 /* ---- rename in place ---- */
 .uf-card .uf-cname[contenteditable]{outline:1px solid var(--uf-accent);border-radius:4px;padding:0 3px;
-  white-space:normal;overflow:visible;text-overflow:clip;min-width:40px}
+  white-space:normal;overflow:visible;text-overflow:clip;min-width:40px;
+  user-select:text;-webkit-user-select:text}
 
 /* ---- frontmatter editor mounted in the reading inspector ---- */
 .uf-insp .fm-input{width:100%;border:1px solid var(--uf-line);border-radius:7px;background:var(--uf-surface);
@@ -583,7 +585,8 @@ export function initUnfold(ctx: AppContext, deps: { selection: SelectionApi; cam
   }, { passive: false });
   let panDrag: { sx: number; sy: number; x: number; y: number } | null = null;
   stageEl.addEventListener('pointerdown', (e) => {
-    if ((e.target as HTMLElement).closest('.uf-card,.uf-ghead,.uf-open,.uf-dock')) return;
+    // U1: stagelayer excluded — pointer capture on stageEl retargets click and kills stage buttons (← explore, proxies)
+    if ((e.target as HTMLElement).closest('.uf-card,.uf-ghead,.uf-open,.uf-dock,.uf-stagelayer')) return;
     panDrag = { sx: e.clientX, sy: e.clientY, x: Z.x, y: Z.y };
     stageEl.classList.add('grab');
     stageEl.setPointerCapture(e.pointerId);
