@@ -12,10 +12,20 @@ tabs, overlays DOM), and `src/main.ts` (toolbar bindings, boot). Re-derive with:
 `npm run flowmap:onboard`, then grep the units named in each row.
 
 **Status vocabulary** (per row): `unfold-native` — already reachable in unfold ·
-`migrating` — an M5 per-feature plan exists · `legacy-only` — reachable only on the canvas
-today · `candidate-drop` — editor-only by nature; needs Chris's decision. As each feature
-migrates, its row is meant to be superseded by a computed roadmap predicate
-(`docs/flowmap/roadmap.json`), not by hand-editing this file.
+`migrating` — ruled into the M5 migration (a per-feature plan is authored for it) ·
+`legacy-only` — reachable only on the canvas today · `candidate-drop` — editor-only by
+nature; needs Chris's decision · `deferred-by-decision` — Chris ruled it backlog. As each
+feature migrates, its row is meant to be superseded by a computed roadmap predicate
+(`docs/flowmap/mvp-roadmap.json`), not by hand-editing this file.
+
+**Rulings (Chris, 2026-07-03):** position editing is NOT dropped — manual node positioning
+(drag; resize/nudge/align pending per-feature review) migrates INTO unfold; drag is planned
+standalone, sequenced after the boot flip. Tidy remains an optional layout command;
+positions stay user-editable in `ctx.state` (current tidy-overrides-drag behaviour is
+acceptable, fix later). Export SVG/PNG deferred to backlog. `camera` is shared core and
+survives (unfold needs screen-to-world math once it has drag). `wires` geometry moves to
+core, the painter dies with legacy. `hooks.render` is surface-conditional during the compare
+period, unfold-only after deletion.
 
 ## A. Model verbs (surface-independent; must be reachable from unfold)
 
@@ -44,7 +54,7 @@ migrates, its row is meant to be superseded by a computed roadmap predicate
 | Mermaid text view + apply + copy | mermaid tab, applyMmd, copyMmd | `mermaid` (only serialiser; textarea DOM is panel-bound) | legacy-only |
 | Diff review (raw proposal) | diffBtn → `planner.openProposal` | `planner` (own overlay, isolation pattern) | legacy-only¹ |
 | Plan review | plannerBtn → `planner.open` | `planner` | legacy-only¹ |
-| Export SVG / PNG | exportPngBtn/exportSvgBtn | `exporter` (draws editor-style boxes) | candidate-drop² |
+| Export SVG / PNG | exportPngBtn/exportSvgBtn | `exporter` (draws editor-style boxes) | deferred-by-decision² |
 | Neighbourhood slice (+ copy) | slice tab | `slice` | legacy-only |
 | Node search / kind filter / jump | nav tab | `navigator` (navigateTo drives canvas camera) | legacy-only |
 | Source body viewer | source tab | `inspector` (updateSource) · unfold `ufRenderInspector` | unfold-native |
@@ -54,56 +64,62 @@ migrates, its row is meant to be superseded by a computed roadmap predicate
 ¹ planner is a fullscreen overlay with its own DOM/CSS (the pattern unfold copied) — expected
 to work over unfold unchanged; needs a live check, then only the *button* migrates.
 ² exporter renders the editor's visual (absolute x/y boxes). Exporting the unfold view is a
-different feature. Decision needed: migrate as model-export, rebuild for unfold, or drop.
+different feature. Ruled deferred (backlog) — revisit after the migration spine lands.
 
-## C. Spatial-editor interactions (most are editor-only by nature)
+## C. Spatial-editor interactions (position editing migrates per ruling; chrome-level rows still need decisions)
 
 | Feature | Trigger(s) today | Owning module(s) | Status |
 |---|---|---|---|
-| Drag node to reposition | pointer drag | `pointer` (startDrag) | candidate-drop³ |
-| Corner resize | pointer drag | `pointer` (startResize) | candidate-drop³ |
+| Drag node to reposition | pointer drag | `pointer` (startDrag) | migrating³ |
+| Corner resize | pointer drag | `pointer` (startResize) | migrating³ |
 | Marquee multi-select | drag on empty canvas | `pointer` (startMarquee) | candidate-drop⁴ |
 | Shift-click multi-select | click | `pointer`/`selection` | candidate-drop⁴ |
-| Arrow-key nudge (+Shift grid) | arrows | `keyboard` (writes x/y) | candidate-drop³ |
-| Snap-to-grid | snapBtn, style toggle | `pointer` + prefs | candidate-drop³ |
-| Alignment guides | during drag | `pointer` (addGuide/showAlignGuides) | candidate-drop³ |
-| Align / distribute | multi-inspector | `nodes` (alignNodes) | candidate-drop³ |
-| Auto-layout "Tidy" | layoutBtn | `layout` (writes x/y) | candidate-drop⁵ |
-| Bring to front | ctx menu | `nodes` (bringToFront, paint order) | candidate-drop³ |
-| Edge label drag / bend drag | pointer drag | `pointer` (startLabelDrag/startBendDrag) | candidate-drop³ |
-| Fill colour / shape / size+pos edit | single inspector | `inspector` | candidate-drop³ |
-| Edge line style / routing / reset | edge inspector | `inspector` | candidate-drop³ |
-| Dot grid / minimap / route-style prefs | style tab | `styleControls` | candidate-drop³ |
-| Fm-cards toggle + width | style tab | `styleControls` (canvas fm cards ≠ unfold cards) | candidate-drop³ |
+| Arrow-key nudge (+Shift grid) | arrows | `keyboard` (writes x/y) | migrating³ |
+| Snap-to-grid | snapBtn, style toggle | `pointer` + prefs | migrating³ |
+| Alignment guides | during drag | `pointer` (addGuide/showAlignGuides) | migrating³ |
+| Align / distribute | multi-inspector | `nodes` (alignNodes) | migrating³ |
+| Auto-layout "Tidy" | layoutBtn | `layout` (writes x/y) | migrating⁵ |
+| Bring to front | ctx menu | `nodes` (bringToFront, paint order) | candidate-drop⁶ |
+| Edge label drag / bend drag | pointer drag | `pointer` (startLabelDrag/startBendDrag) | candidate-drop⁶ |
+| Fill colour / shape / size+pos edit | single inspector | `inspector` | candidate-drop⁶ |
+| Edge line style / routing / reset | edge inspector | `inspector` | candidate-drop⁶ |
+| Dot grid / minimap / route-style prefs | style tab | `styleControls` | candidate-drop⁶ |
+| Fm-cards toggle + width | style tab | `styleControls` (canvas fm cards ≠ unfold cards) | candidate-drop⁶ |
 
-³ Meaningful only on an infinite manually-positioned canvas. **But see the layout note (⁵)
-and the dependency audit: unfold's stage pills derive their angles from `ctx.state`
-positions**, so "drop the ability to *edit* positions" ≠ "positions stop mattering".
+³ Ruled (2026-07-03): manual node positioning migrates INTO unfold. Drag is a standalone
+per-feature plan (likely the largest migration item), sequenced after the boot flip. Which
+of resize / nudge / align / snap / guides survive is decided inside that plan's review, not
+here. Positions stay user-editable in `ctx.state`; unfold's stage pills already consume
+those positions (centroid angles).
 ⁴ Unfold's selection today is single card / wire / group / type-focus. Multi-select in unfold
 is a possible M5 feature, not a port of marquee.
-⁵ `layout.autoLayout` writes the x/y that unfold's centroid geometry consumes. Dropping Tidy
-means positions freeze at last-edited values (or a layout pass runs headless). Chris decides.
+⁵ Ruled: Tidy remains an optional layout command over `ctx.state` positions. Its current
+click behaviour overrides manual moves — acceptable for now, an easy later fix inside the
+drag plan's design.
+⁶ Not yet ruled — visual/chrome-level editing of the legacy surface. Needs a decision before
+the deletion gate; not blocking the boot flip or the drag plan.
 
 ## D. Navigation, camera, chrome
 
 | Feature | Trigger(s) today | Owning module(s) | Status |
 |---|---|---|---|
 | Pan (scroll / space-drag / middle-drag) | pointer, wheel | `pointer`, `keyboard`, `camera` | unfold-native (own stage panning) |
-| Zoom (pinch / ⌘-scroll / +− / %) | keyboard, zoom overlay | `camera` | legacy-only⁶ |
+| Zoom (pinch / ⌘-scroll / +− / %) | keyboard, zoom overlay | `camera` | legacy-only⁷ |
 | Zoom to fit (`F`) | keyboard, zFit | `camera` (zoomToFit) | unfold-native (`ufReframe`, auto) |
 | Drill into container | ctx "Open internals", `view.enter` | `view` | unfold-native (expand card / stage mode / travel) |
 | Go up / go to root / breadcrumb | zHome, breadcrumb, Esc | `view` | unfold-native (collapse / stage exit; crumbs in inspector) |
-| Minimap | minimap canvas | `minimap` | candidate-drop³ |
+| Minimap | minimap canvas | `minimap` | candidate-drop⁶ |
 | Status bar (node/edge/sel counts) | passive | `inspector` (updateStatus) | candidate-drop (trivial to re-add) |
-| Toast notifications | app-wide via `ctx.hooks.toast` | `tabs` (toast) — chrome module owns a shared hook | legacy-only⁷ |
+| Toast notifications | app-wide via `ctx.hooks.toast` | `tabs` (toast) — chrome module owns a shared hook | legacy-only⁸ |
 | Right panel + tabs + resize + Tab toggle | tabs strip | `tabs` | candidate-drop (unfold has its own inspector dock) |
 | Help overlay (`?`) | helpBtn | inline in `main.ts` | legacy-only (unfold needs its own shortcut ref) |
 | Context menu | right-click | `contextMenu` | legacy-only (unfold has no ctx menu) |
 | Esc behaviour | keyboard | `keyboard` (editor) · unfold outermost-Esc **closes to editor — must be removed per intent** | legacy-only |
 
-⁶ Unfold reframes automatically; whether the user also gets manual zoom is an M5 design
-question, not a straight port.
-⁷ `toast` must be extracted from `tabs` (or re-owned) before `tabs` can die.
+⁷ Unfold reframes automatically; whether the user also gets manual zoom is an M5 design
+question, not a straight port. Camera is ruled shared core (drag needs screen-to-world math),
+so manual zoom in unfold costs little if wanted.
+⁸ `toast` must be extracted from `tabs` (or re-owned) before `tabs` can die.
 
 ## E. Already unfold-native (no legacy dependency) — for completeness
 
