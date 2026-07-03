@@ -26,7 +26,9 @@ from Chris: boot → unfold always; the legacy canvas is a temporary compare sur
 at parity; no ✕ on unfold. This session recomputed the verify step, recorded Chris's rulings,
 rewrote the M4 predicates, and authored the boot-flip plan — **code is deliberately not
 written**: acceptance is red, the plan awaits Chris's review in the flowmap app.
-Commits `ef0f9dc` (parity checklist) → `ec8367d` (design doc + M4 predicates + plan).
+Branch `m4-correction`, PR #33 (github.com/novakai-one/novakai/pull/33). Commits
+`ef0f9dc` (parity checklist) → `ec8367d` (design doc + M4 predicates + plan) →
+`0d7fa97` (handoff rotation). Never commit on `main` — standing verdict in KNOWN_EDGES.md.
 
 | What | Verify it yourself | Expect |
 |---|---|---|
